@@ -11,6 +11,16 @@ npm run dev
 
 Use `npm run build` to verify a production build.
 
+## GitHub Pages
+
+The repository includes a separate static build that reuses the same React interface and `atlas.json` data:
+
+```bash
+npm run build:pages
+```
+
+Pushing to `main` triggers `.github/workflows/pages.yml`, which publishes `pages-dist` to GitHub Pages. No workbook data is duplicated; refreshing `app/data/atlas.json` updates both deployment targets.
+
 ## Refresh the data
 
 The site reads `app/data/atlas.json`, which is generated from the master extraction workbook. After adding or correcting papers in the workbook, run:
