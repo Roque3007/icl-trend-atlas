@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import atlas from "./data/atlas.json";
 
-type Lens = "Task" | "Model" | "Metric" | "Pattern";
+type Lens = "I/O" | "Task" | "Scope" | "Model" | "Metric" | "Pattern";
 type ScoreMode = "raw" | "normalized";
+type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
+type FieldXMode = "progress" | "shots";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 
-const lenses: Lens[] = ["Task", "Model", "Metric", "Pattern"];
+const lenses: Lens[] = ["I/O", "Task", "Scope", "Model", "Metric", "Pattern"];
 
 const patternColors: Record<string, string> = {
   "Monotonic improvement": "#46d7a8",
@@ -23,10 +25,32 @@ const patternColors: Record<string, string> = {
 };
 
 function valueForLens(trajectory: Trajectory, lens: Lens) {
+  if (lens === "I/O") return trajectory.ioFamily;
   if (lens === "Task") return trajectory.taskGroup;
+  if (lens === "Scope") return trajectory.semanticScope;
   if (lens === "Model") return trajectory.modelType;
   if (lens === "Metric") return trajectory.metricGroup;
   return trajectory.category;
+}
+
+const fieldPalette = ["#46d7a8", "#ff9c72", "#9f8bff", "#56b8df", "#f7b84b", "#ef6fa8", "#80c783", "#c09bff", "#54c6ba", "#f08080"];
+
+function stableColor(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  return fieldPalette[Math.abs(hash) % fieldPalette.length];
+}
+
+function fieldGroup(trajectory: Trajectory, mode: FieldColorMode) {
+  if (mode === "Pattern") return trajectory.category;
+  if (mode === "I/O family") return trajectory.ioFamily;
+  if (mode === "Scope") return trajectory.semanticScope;
+  return trajectory.semanticOperation;
+}
+
+function fieldColor(trajectory: Trajectory, mode: FieldColorMode) {
+  const group = fieldGroup(trajectory, mode);
+  return mode === "Pattern" ? (patternColors[group] ?? stableColor(group)) : stableColor(group);
 }
 
 function topGroupForLens(lens: Lens) {
@@ -296,6 +320,297 @@ function TrajectoryChart({ trajectory }: { trajectory: Trajectory }) {
   );
 }
 
+function quantile(values: number[], position: number) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = (sorted.length - 1) * position;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sorted[lower];
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
+}
+
+function TrajectoryField({
+  trajectories,
+  selectedTrajectoryId,
+  onSelect,
+}: {
+  trajectories: Trajectory[];
+  selectedTrajectoryId: string;
+  onSelect: (trajectory: Trajectory) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [colorMode, setColorMode] = useState<FieldColorMode>("Pattern");
+  const [xMode, setXMode] = useState<FieldXMode>("progress");
+  const [inputFilter, setInputFilter] = useState("All inputs");
+  const [outputFilter, setOutputFilter] = useState("All outputs");
+  const [showMedian, setShowMedian] = useState(true);
+  const [hoveredId, setHoveredId] = useState("");
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; trajectory: Trajectory; score: number; shot: number } | null>(null);
+
+  const inputTypes = useMemo(() => [...new Set(trajectories.map((item) => item.inputType))].sort(), [trajectories]);
+  const outputTypes = useMemo(() => [...new Set(trajectories.map((item) => item.outputType))].sort(), [trajectories]);
+
+  const prepared = useMemo(() => trajectories
+    .filter((trajectory) => inputFilter === "All inputs" || trajectory.inputType === inputFilter)
+    .filter((trajectory) => outputFilter === "All outputs" || trajectory.outputType === outputFilter)
+    .map((trajectory) => {
+      const rawPoints = trajectory.results
+        .map((point) => typeof point.shotCount === "number" && typeof point.analysisScore === "number"
+          ? { shot: point.shotCount, analysisScore: point.analysisScore }
+          : null)
+        .filter((point): point is { shot: number; analysisScore: number } => point !== null)
+        .sort((a, b) => a.shot - b.shot);
+      if (rawPoints.length < 2) return null;
+      const baseline = rawPoints[0].analysisScore;
+      const largestChange = Math.max(...rawPoints.map((point) => Math.abs(point.analysisScore - baseline)));
+      const minShot = rawPoints[0].shot;
+      const maxShot = rawPoints[rawPoints.length - 1].shot;
+      return {
+        trajectory,
+        minShot,
+        maxShot,
+        points: rawPoints.map((point) => ({
+          shot: point.shot,
+          score: largestChange === 0 ? 0 : (point.analysisScore - baseline) / largestChange,
+          progress: (point.shot - minShot) / Math.max(1, maxShot - minShot),
+        })),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null), [inputFilter, outputFilter, trajectories]);
+
+  const medianSeries = useMemo(() => {
+    const interpolate = (points: (typeof prepared)[number]["points"], progress: number) => {
+      if (progress <= points[0].progress) return points[0].score;
+      if (progress >= points[points.length - 1].progress) return points[points.length - 1].score;
+      for (let index = 1; index < points.length; index += 1) {
+        if (progress <= points[index].progress) {
+          const previous = points[index - 1];
+          const current = points[index];
+          const ratio = (progress - previous.progress) / Math.max(0.0001, current.progress - previous.progress);
+          return previous.score + (current.score - previous.score) * ratio;
+        }
+      }
+      return 0;
+    };
+    return Array.from({ length: 21 }, (_, index) => {
+      const progress = index / 20;
+      const values = prepared.map((item) => interpolate(item.points, progress));
+      return { progress, lower: quantile(values, 0.25), median: quantile(values, 0.5), upper: quantile(values, 0.75) };
+    });
+  }, [prepared]);
+
+  const legend = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of prepared) {
+      const group = fieldGroup(item.trajectory, colorMode);
+      counts.set(group, (counts.get(group) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [colorMode, prepared]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || prepared.length === 0) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    let animationFrame = 0;
+    let resizeFrame = 0;
+    const maxGlobalShot = Math.max(...prepared.flatMap((item) => item.points.map((point) => point.shot)), 1);
+
+    const draw = (revealProgress: number) => {
+      const rect = container.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(320, rect.width);
+      const height = Math.max(390, rect.height);
+      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+      }
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.clearRect(0, 0, width, height);
+      const pad = { left: 55, right: 22, top: 28, bottom: 44 };
+      const plotWidth = width - pad.left - pad.right;
+      const plotHeight = height - pad.top - pad.bottom;
+      const xFor = (point: { shot: number; progress: number }) => pad.left + (xMode === "progress" ? point.progress : point.shot / maxGlobalShot) * plotWidth;
+      const yFor = (score: number) => pad.top + (1 - (score + 1) / 2) * plotHeight;
+
+      context.font = "11px Arial";
+      context.textBaseline = "middle";
+      [-1, -0.5, 0, 0.5, 1].forEach((value) => {
+        const y = yFor(value);
+        context.strokeStyle = value === 0 ? "rgba(216,255,106,.45)" : "rgba(255,255,255,.10)";
+        context.lineWidth = value === 0 ? 1.4 : 1;
+        context.beginPath();
+        context.moveTo(pad.left, y);
+        context.lineTo(width - pad.right, y);
+        context.stroke();
+        context.fillStyle = "rgba(255,255,255,.48)";
+        context.textAlign = "right";
+        context.fillText(value > 0 ? `+${value}` : String(value), pad.left - 9, y);
+      });
+
+      context.textAlign = "center";
+      [0, 0.25, 0.5, 0.75, 1].forEach((value) => {
+        const x = pad.left + value * plotWidth;
+        context.fillStyle = "rgba(255,255,255,.48)";
+        context.fillText(xMode === "progress" ? `${Math.round(value * 100)}%` : String(Math.round(value * maxGlobalShot)), x, height - 18);
+      });
+
+      if (showMedian && xMode === "progress" && medianSeries.length) {
+        context.fillStyle = "rgba(216,255,106,.10)";
+        context.beginPath();
+        medianSeries.forEach((point, index) => {
+          const x = pad.left + point.progress * plotWidth;
+          const y = yFor(point.upper * revealProgress);
+          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        [...medianSeries].reverse().forEach((point) => context.lineTo(pad.left + point.progress * plotWidth, yFor(point.lower * revealProgress)));
+        context.closePath();
+        context.fill();
+      }
+
+      const ordered = [...prepared].sort((a, b) => {
+        const aActive = a.trajectory.trajectoryId === hoveredId || a.trajectory.trajectoryId === selectedTrajectoryId;
+        const bActive = b.trajectory.trajectoryId === hoveredId || b.trajectory.trajectoryId === selectedTrajectoryId;
+        return Number(aActive) - Number(bActive);
+      });
+      for (const item of ordered) {
+        const isHovered = item.trajectory.trajectoryId === hoveredId;
+        const isSelected = item.trajectory.trajectoryId === selectedTrajectoryId;
+        const dimmed = Boolean(hoveredId) && !isHovered;
+        context.strokeStyle = fieldColor(item.trajectory, colorMode);
+        context.globalAlpha = isHovered ? 1 : isSelected ? 0.9 : dimmed ? 0.035 : 0.16;
+        context.lineWidth = isHovered ? 3.2 : isSelected ? 2.4 : 1;
+        context.lineCap = "round";
+        context.lineJoin = "round";
+        context.beginPath();
+        item.points.forEach((point, index) => {
+          const x = xFor(point);
+          const y = yFor(point.score * revealProgress);
+          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.stroke();
+      }
+      context.globalAlpha = 1;
+
+      if (showMedian && xMode === "progress" && medianSeries.length) {
+        context.strokeStyle = "#d8ff6a";
+        context.lineWidth = 2.8;
+        context.beginPath();
+        medianSeries.forEach((point, index) => {
+          const x = pad.left + point.progress * plotWidth;
+          const y = yFor(point.median * revealProgress);
+          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.stroke();
+      }
+    };
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const start = performance.now();
+    const animate = (time: number) => {
+      const linear = reduced ? 1 : Math.min(1, (time - start) / 800);
+      draw(1 - Math.pow(1 - linear, 4));
+      if (linear < 1) animationFrame = requestAnimationFrame(animate);
+    };
+    animationFrame = requestAnimationFrame(animate);
+    const resizeObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => draw(1));
+    });
+    resizeObserver.observe(container);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(resizeFrame);
+      resizeObserver.disconnect();
+    };
+  }, [colorMode, hoveredId, medianSeries, prepared, selectedTrajectoryId, showMedian, xMode]);
+
+  function nearestTrajectory(event: React.PointerEvent<HTMLDivElement>) {
+    const container = containerRef.current;
+    if (!container || prepared.length === 0) return null;
+    const rect = container.getBoundingClientRect();
+    const pad = { left: 55, right: 22, top: 28, bottom: 44 };
+    const plotWidth = rect.width - pad.left - pad.right;
+    const plotHeight = rect.height - pad.top - pad.bottom;
+    const maxGlobalShot = Math.max(...prepared.flatMap((item) => item.points.map((point) => point.shot)), 1);
+    let nearest: { distance: number; trajectory: Trajectory; score: number; shot: number } | null = null;
+    for (const item of prepared) {
+      for (const point of item.points) {
+        const x = pad.left + (xMode === "progress" ? point.progress : point.shot / maxGlobalShot) * plotWidth;
+        const y = pad.top + (1 - (point.score + 1) / 2) * plotHeight;
+        const distance = Math.hypot(event.clientX - rect.left - x, event.clientY - rect.top - y);
+        if (!nearest || distance < nearest.distance) nearest = { distance, trajectory: item.trajectory, score: point.score, shot: point.shot };
+      }
+    }
+    return nearest && nearest.distance <= 24 ? nearest : null;
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const nearest = nearestTrajectory(event);
+    if (!nearest) {
+      setHoveredId("");
+      setTooltip(null);
+      return;
+    }
+    setHoveredId(nearest.trajectory.trajectoryId);
+    setTooltip({ x: event.clientX, y: event.clientY, trajectory: nearest.trajectory, score: nearest.score, shot: nearest.shot });
+  }
+
+  const paperCount = new Set(prepared.map((item) => item.trajectory.paperId)).size;
+  const routeCount = new Set(prepared.map((item) => item.trajectory.ioFamily)).size;
+
+  return (
+    <section className="trajectory-field inview" aria-labelledby="trajectory-field-title">
+      <div className="field-heading">
+        <div>
+          <span className="section-kicker">All results / Overview</span>
+          <h2 id="trajectory-field-title">Trajectory field</h2>
+          <p>Every curve starts at zero and is rescaled to its own largest direction-normalized change. Compare shape here; inspect exact magnitude below.</p>
+        </div>
+        <div className="field-summary" aria-label="Visible data summary">
+          <div><strong>{prepared.length}</strong><span>trajectories</span></div>
+          <div><strong>{paperCount}</strong><span>papers</span></div>
+          <div><strong>{routeCount}</strong><span>I/O routes</span></div>
+        </div>
+      </div>
+
+      <div className="field-controls">
+        <label><span>Input</span><select value={inputFilter} onChange={(event) => setInputFilter(event.target.value)}><option>All inputs</option>{inputTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label><span>Output</span><select value={outputFilter} onChange={(event) => setOutputFilter(event.target.value)}><option>All outputs</option>{outputTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label><span>Color</span><select value={colorMode} onChange={(event) => setColorMode(event.target.value as FieldColorMode)}><option>Pattern</option><option>I/O family</option><option>Operation</option><option>Scope</option></select></label>
+        <div className="field-segment" role="group" aria-label="Horizontal axis">
+          <span>X-axis</span>
+          <button type="button" className={xMode === "progress" ? "active" : ""} onClick={() => setXMode("progress")}>Progress</button>
+          <button type="button" className={xMode === "shots" ? "active" : ""} onClick={() => setXMode("shots")}>Shots</button>
+        </div>
+        <button type="button" className={`median-toggle ${showMedian ? "active" : ""}`} onClick={() => setShowMedian((value) => !value)} aria-pressed={showMedian}>Median + middle 50%</button>
+      </div>
+
+      <div className="field-canvas" ref={containerRef} onPointerMove={handlePointerMove} onPointerLeave={() => { setHoveredId(""); setTooltip(null); }} onClick={() => { const selected = prepared.find((item) => item.trajectory.trajectoryId === hoveredId); if (selected) onSelect(selected.trajectory); }}>
+        <canvas ref={canvasRef} aria-label={`Normalized shapes for ${prepared.length} experimental trajectories`} />
+        <div className="field-y-label" aria-hidden="true">Normalized shape</div>
+        <div className="field-x-label" aria-hidden="true">{xMode === "progress" ? "Relative shot progression" : "Reported shot count"}</div>
+        {tooltip ? (
+          <div className="field-tooltip" style={{ left: tooltip.x - (containerRef.current?.getBoundingClientRect().left ?? 0), top: tooltip.y - (containerRef.current?.getBoundingClientRect().top ?? 0) }}>
+            <span>{tooltip.trajectory.taskSubtype} · {tooltip.shot} shots</span>
+            <strong>{tooltip.trajectory.modelName}</strong>
+            <small>{tooltip.trajectory.ioFamily} · shape {tooltip.score > 0 ? "+" : ""}{tooltip.score.toFixed(2)}</small>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="field-legend" aria-label={`Legend colored by ${colorMode}`}>
+        {legend.map(([name, count]) => <span key={name}><i style={{ background: colorMode === "Pattern" ? (patternColors[name] ?? stableColor(name)) : stableColor(name) }} />{name}<small>{count}</small></span>)}
+      </div>
+      <p className="field-footnote">Counts can be dominated by papers reporting many model–metric combinations. Use the paper count and the source drilldown before interpreting coverage.</p>
+    </section>
+  );
+}
+
 export default function Home() {
   const [lens, setLens] = useState<Lens>("Task");
   const [selectedGroup, setSelectedGroup] = useState(() => topGroupForLens("Task"));
@@ -409,6 +724,22 @@ export default function Home() {
     setEvidenceFilter("All evidence");
   }
 
+  function selectFromField(trajectory: Trajectory) {
+    setLens("I/O");
+    setSelectedGroup(trajectory.ioFamily);
+    setQuery("");
+    setPatternFilter("All patterns");
+    setEvidenceFilter("All evidence");
+    setExpandedPaper(trajectory.paperId);
+    setSelectedTrajectoryId(trajectory.trajectoryId);
+    window.requestAnimationFrame(() => {
+      document.getElementById("explorer")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }
+
   return (
     <main className="site-shell">
       <div className="ambient ambient-one" aria-hidden="true" />
@@ -436,7 +767,9 @@ export default function Home() {
         </p>
       </section>
 
-      <section className="atlas-frame reveal reveal-three" aria-label="ICL trend explorer">
+      <TrajectoryField trajectories={atlas.trajectories} selectedTrajectoryId={selectedTrajectoryId} onSelect={selectFromField} />
+
+      <section className="atlas-frame reveal reveal-three" id="explorer" aria-label="ICL trend explorer">
         <aside className="trend-rail">
           <div className="rail-heading">
             <div><span className="section-kicker">01 / Explore</span><h2>Trend map</h2></div>

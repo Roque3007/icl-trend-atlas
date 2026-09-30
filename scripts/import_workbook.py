@@ -72,25 +72,178 @@ def metric_group(metric):
     return "Other"
 
 
-def task_group(task):
+def task_taxonomy(task):
+    """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
-    if "translation" in text or "post-editing" in text:
-        return "Machine translation"
-    if "named entity recognition" in text:
-        return "Information extraction"
-    if "question answering" in text:
-        return "Question answering"
-    if any(token in text for token in ("natural language inference", "entailment", "fact verification")):
-        return "Inference and verification"
-    if "paraphrase" in text:
-        return "Paraphrase detection"
+
+    if "inference time" in text or text == "inference":
+        return {
+            "inputType": "Model input",
+            "outputType": "Scalar measurement",
+            "semanticOperation": "System efficiency",
+            "taskSubtype": "Inference latency",
+            "semanticScope": "System-level",
+        }
+    if "audio question answering" in text:
+        return {
+            "inputType": "Audio + question",
+            "outputType": "Answer",
+            "semanticOperation": "Question answering",
+            "taskSubtype": "Audio question answering",
+            "semanticScope": "Cross-modal / compositional",
+        }
+    if "table question answering" in text:
+        return {
+            "inputType": "Table + question",
+            "outputType": "Answer",
+            "semanticOperation": "Question answering",
+            "taskSubtype": "Table question answering",
+            "semanticScope": "Context-grounded",
+        }
+    if "line graph-to-text" in text:
+        return {
+            "inputType": "Graph",
+            "outputType": "Text",
+            "semanticOperation": "Grounded generation",
+            "taskSubtype": "Graph-to-text generation",
+            "semanticScope": "Cross-modal / compositional",
+        }
+    if "market comment generation" in text:
+        return {
+            "inputType": "Structured data",
+            "outputType": "Text",
+            "semanticOperation": "Grounded generation",
+            "taskSubtype": "Market commentary generation",
+            "semanticScope": "Context-grounded",
+        }
     if "visual step" in text or "cross-modal step" in text:
-        return "Multimodal procedural reasoning"
+        return {
+            "inputType": "Visual sequence",
+            "outputType": "Ordered sequence",
+            "semanticOperation": "Procedural reasoning",
+            "taskSubtype": "Visual step ordering",
+            "semanticScope": "Cross-modal / compositional",
+        }
+    if "empathetic dialogue" in text:
+        return {
+            "inputType": "Conversation",
+            "outputType": "Text",
+            "semanticOperation": "Open-ended generation",
+            "taskSubtype": "Empathetic dialogue",
+            "semanticScope": "Context-grounded",
+        }
+    if "named entity recognition" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Span(s)",
+            "semanticOperation": "Span labeling / extraction",
+            "taskSubtype": "Named entity recognition",
+            "semanticScope": "Local / span",
+        }
+    if "intervention extraction" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Span(s)",
+            "semanticOperation": "Span labeling / extraction",
+            "taskSubtype": "Intervention extraction",
+            "semanticScope": "Local / span",
+        }
+    if "translation" in text or "post-editing" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Text",
+            "semanticOperation": "Translation / transformation",
+            "taskSubtype": "Machine translation",
+            "semanticScope": "Context-grounded",
+        }
+    if "post-asr correction" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Text",
+            "semanticOperation": "Translation / transformation",
+            "taskSubtype": "ASR correction",
+            "semanticScope": "Context-grounded",
+        }
+    if "entailment" in text and "explanation" in text:
+        return {
+            "inputType": "Text pair",
+            "outputType": "Label + text",
+            "semanticOperation": "Inference + explanation",
+            "taskSubtype": "Entailment with explanation",
+            "semanticScope": "Relational",
+        }
+    if "natural language inference" in text or "entailment" in text:
+        return {
+            "inputType": "Text pair",
+            "outputType": "Label",
+            "semanticOperation": "Inference / verification",
+            "taskSubtype": "Natural language inference",
+            "semanticScope": "Relational",
+        }
+    if "fact verification" in text:
+        return {
+            "inputType": "Claim + evidence",
+            "outputType": "Label",
+            "semanticOperation": "Inference / verification",
+            "taskSubtype": "Fact verification",
+            "semanticScope": "Relational",
+        }
+    if "paraphrase" in text:
+        return {
+            "inputType": "Text pair",
+            "outputType": "Label",
+            "semanticOperation": "Similarity / matching",
+            "taskSubtype": "Paraphrase detection",
+            "semanticScope": "Relational",
+        }
+    if "question answering" in text:
+        return {
+            "inputType": "Question + context",
+            "outputType": "Answer",
+            "semanticOperation": "Question answering",
+            "taskSubtype": "Question answering",
+            "semanticScope": "Context-grounded",
+        }
     if "explanation generation" in text:
-        return "Explanation generation"
+        return {
+            "inputType": "Text",
+            "outputType": "Text",
+            "semanticOperation": "Open-ended generation",
+            "taskSubtype": "Explanation generation",
+            "semanticScope": "Context-grounded",
+        }
+    if "moral foundation" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Label(s)",
+            "semanticOperation": "Classification",
+            "taskSubtype": "Moral foundation identification",
+            "semanticScope": "Instance-level",
+        }
+    if "metaphor" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Label",
+            "semanticOperation": "Classification",
+            "taskSubtype": "Metaphor intention classification",
+            "semanticScope": "Instance-level",
+        }
     if any(token in text for token in ("classification", "sentiment", "topic")):
-        return "Classification"
-    return "Other"
+        subtype = "Sentiment analysis" if "sentiment" in text else "Text classification"
+        return {
+            "inputType": "Text",
+            "outputType": "Label",
+            "semanticOperation": "Classification",
+            "taskSubtype": subtype,
+            "semanticScope": "Instance-level",
+        }
+    return {
+        "inputType": "Text",
+        "outputType": "Other",
+        "semanticOperation": "Other",
+        "taskSubtype": str(task or "Unspecified task"),
+        "semanticScope": "Unspecified",
+    }
 
 
 def evidence_tier(number_of_conditions):
@@ -173,6 +326,7 @@ def build_bundle(workbook_path: Path):
     for row in trajectories:
         trajectory_id = str(row.get("trajectory_id") or "")
         pattern = str(row.get("numerical_pattern") or "insufficient_points")
+        taxonomy = task_taxonomy(row.get("task"))
         normalized_change = row.get("normalized_endpoint_change")
         if normalized_change is None:
             endpoint_outcome = "Unknown"
@@ -189,7 +343,13 @@ def build_bundle(workbook_path: Path):
                 "paperId": row.get("paper_id"),
                 "paperTitle": row.get("paper_title"),
                 "task": row.get("task"),
-                "taskGroup": task_group(row.get("task")),
+                "taskGroup": taxonomy["semanticOperation"],
+                "inputType": taxonomy["inputType"],
+                "outputType": taxonomy["outputType"],
+                "ioFamily": f"{taxonomy['inputType']} → {taxonomy['outputType']}",
+                "semanticOperation": taxonomy["semanticOperation"],
+                "taskSubtype": taxonomy["taskSubtype"],
+                "semanticScope": taxonomy["semanticScope"],
                 "dataset": row.get("dataset"),
                 "modelName": row.get("model_name"),
                 "modelType": row.get("model_type"),
@@ -226,7 +386,7 @@ def build_bundle(workbook_path: Path):
     paper_ids = {row["paperId"] for row in web_trajectories if row.get("paperId")}
     return {
         "meta": {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "sourceFile": workbook_path.name,
             "paperCount": len(paper_ids),
@@ -259,4 +419,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
