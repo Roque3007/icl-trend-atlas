@@ -6,7 +6,7 @@ import atlas from "./data/atlas.json";
 type Lens = "I/O" | "Task" | "Scope" | "Model" | "Metric" | "Pattern";
 type ScoreMode = "raw" | "normalized";
 type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
-type FieldXMode = "progress" | "shots";
+type FieldXMode = "progress" | "shots" | "logShots";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 
@@ -434,7 +434,10 @@ function TrajectoryField({
       const pad = { left: 55, right: 22, top: 28, bottom: 44 };
       const plotWidth = width - pad.left - pad.right;
       const plotHeight = height - pad.top - pad.bottom;
-      const xFor = (point: { shot: number; progress: number }) => pad.left + (xMode === "progress" ? point.progress : point.shot / maxGlobalShot) * plotWidth;
+      const shotPosition = (shot: number) => xMode === "logShots"
+        ? Math.log1p(Math.max(0, shot)) / Math.log1p(maxGlobalShot)
+        : shot / maxGlobalShot;
+      const xFor = (point: { shot: number; progress: number }) => pad.left + (xMode === "progress" ? point.progress : shotPosition(point.shot)) * plotWidth;
       const yFor = (score: number) => pad.top + (1 - (score + 1) / 2) * plotHeight;
 
       context.font = "11px Arial";
@@ -453,10 +456,16 @@ function TrajectoryField({
       });
 
       context.textAlign = "center";
-      [0, 0.25, 0.5, 0.75, 1].forEach((value) => {
-        const x = pad.left + value * plotWidth;
+      const xTicks = xMode === "progress"
+        ? [0, 0.25, 0.5, 0.75, 1].map((value) => ({ position: value, label: `${Math.round(value * 100)}%` }))
+        : xMode === "logShots"
+          ? [...new Set([0, 1, 2, 4, 8, 16, 32, 64, 128, maxGlobalShot].filter((value) => value <= maxGlobalShot))]
+            .map((value) => ({ position: shotPosition(value), label: String(value) }))
+          : [0, 0.25, 0.5, 0.75, 1].map((value) => ({ position: value, label: String(Math.round(value * maxGlobalShot)) }));
+      xTicks.forEach(({ position, label }) => {
+        const x = pad.left + position * plotWidth;
         context.fillStyle = "rgba(255,255,255,.48)";
-        context.fillText(xMode === "progress" ? `${Math.round(value * 100)}%` : String(Math.round(value * maxGlobalShot)), x, height - 18);
+        context.fillText(label, x, height - 18);
       });
 
       if (showMedian && xMode === "progress" && medianSeries.length) {
@@ -540,7 +549,10 @@ function TrajectoryField({
     let nearest: { distance: number; trajectory: Trajectory; score: number; shot: number } | null = null;
     for (const item of prepared) {
       for (const point of item.points) {
-        const x = pad.left + (xMode === "progress" ? point.progress : point.shot / maxGlobalShot) * plotWidth;
+        const shotPosition = xMode === "logShots"
+          ? Math.log1p(Math.max(0, point.shot)) / Math.log1p(maxGlobalShot)
+          : point.shot / maxGlobalShot;
+        const x = pad.left + (xMode === "progress" ? point.progress : shotPosition) * plotWidth;
         const y = pad.top + (1 - (point.score + 1) / 2) * plotHeight;
         const distance = Math.hypot(event.clientX - rect.left - x, event.clientY - rect.top - y);
         if (!nearest || distance < nearest.distance) nearest = { distance, trajectory: item.trajectory, score: point.score, shot: point.shot };
@@ -586,6 +598,7 @@ function TrajectoryField({
           <span>X-axis</span>
           <button type="button" className={xMode === "progress" ? "active" : ""} onClick={() => setXMode("progress")}>Progress</button>
           <button type="button" className={xMode === "shots" ? "active" : ""} onClick={() => setXMode("shots")}>Shots</button>
+          <button type="button" className={xMode === "logShots" ? "active" : ""} onClick={() => setXMode("logShots")}>Log shots</button>
         </div>
         <button type="button" className={`median-toggle ${showMedian ? "active" : ""}`} onClick={() => setShowMedian((value) => !value)} aria-pressed={showMedian}>Median + middle 50%</button>
       </div>
@@ -593,7 +606,7 @@ function TrajectoryField({
       <div className="field-canvas" ref={containerRef} onPointerMove={handlePointerMove} onPointerLeave={() => { setHoveredId(""); setTooltip(null); }} onClick={() => { const selected = prepared.find((item) => item.trajectory.trajectoryId === hoveredId); if (selected) onSelect(selected.trajectory); }}>
         <canvas ref={canvasRef} aria-label={`Normalized shapes for ${prepared.length} experimental trajectories`} />
         <div className="field-y-label" aria-hidden="true">Normalized shape</div>
-        <div className="field-x-label" aria-hidden="true">{xMode === "progress" ? "Relative shot progression" : "Reported shot count"}</div>
+        <div className="field-x-label" aria-hidden="true">{xMode === "progress" ? "Relative shot progression" : xMode === "logShots" ? "Reported shot count · log(1 + shots)" : "Reported shot count"}</div>
         {tooltip ? (
           <div className="field-tooltip" style={{ left: tooltip.x - (containerRef.current?.getBoundingClientRect().left ?? 0), top: tooltip.y - (containerRef.current?.getBoundingClientRect().top ?? 0) }}>
             <span>{tooltip.trajectory.taskSubtype} · {tooltip.shot} shots</span>
@@ -606,7 +619,67 @@ function TrajectoryField({
       <div className="field-legend" aria-label={`Legend colored by ${colorMode}`}>
         {legend.map(([name, count]) => <span key={name}><i style={{ background: colorMode === "Pattern" ? (patternColors[name] ?? stableColor(name)) : stableColor(name) }} />{name}<small>{count}</small></span>)}
       </div>
-      <p className="field-footnote">Counts can be dominated by papers reporting many model–metric combinations. Use the paper count and the source drilldown before interpreting coverage.</p>
+      <p className="field-footnote">Counts can be dominated by papers reporting many model–metric combinations. Use the paper count and the source drilldown before interpreting coverage. Log shots uses log(1 + shot count), which keeps zero-shot points visible.</p>
+    </section>
+  );
+}
+
+function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: string) => void }) {
+  const meta = atlas.meta;
+  const operationCoverage = useMemo(() => {
+    const buckets = new Map<string, { trajectories: number; papers: Set<string> }>();
+    for (const trajectory of atlas.trajectories) {
+      const current = buckets.get(trajectory.semanticOperation) ?? { trajectories: 0, papers: new Set<string>() };
+      current.trajectories += 1;
+      current.papers.add(trajectory.paperId);
+      buckets.set(trajectory.semanticOperation, current);
+    }
+    return [...buckets.entries()]
+      .map(([name, value]) => ({ name, trajectories: value.trajectories, papers: value.papers.size }))
+      .sort((a, b) => a.papers - b.papers || a.trajectories - b.trajectories || a.name.localeCompare(b.name));
+  }, []);
+  const sparseOperations = operationCoverage.filter((item) => item.papers <= 2).slice(0, 6);
+
+  return (
+    <section className="coverage-audit inview" aria-labelledby="coverage-title">
+      <div className="coverage-heading">
+        <div>
+          <span className="section-kicker">Coverage / Next extraction</span>
+          <h2 id="coverage-title">Process the gaps, not just the next row.</h2>
+        </div>
+        <p>Coverage is ranked by independent papers rather than trajectory count. The next extraction queue can prioritize operations represented by only one or two papers.</p>
+      </div>
+
+      <div className="coverage-status" aria-label="Paper screening status">
+        <div><strong>{meta.reviewedPaperCount}</strong><span>reviewed of {meta.candidatePaperCount}</span></div>
+        <div><strong>{meta.paperCount}</strong><span>included with exact multi-shot results</span></div>
+        <div><strong>{meta.remainingPaperCount}</strong><span>candidate papers remaining</span></div>
+        <div><strong>{meta.readyQueueCount}</strong><span>ready in the compact queue</span></div>
+      </div>
+
+      <div className="coverage-body">
+        <div className="gap-list">
+          <div className="coverage-subhead"><span>Lowest paper coverage</span><small>Click to inspect current evidence</small></div>
+          {sparseOperations.map((item, index) => (
+            <button key={item.name} type="button" className="gap-row" onClick={() => onChooseOperation(item.name)}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <strong>{item.name}</strong>
+              <small>{item.papers} {item.papers === 1 ? "paper" : "papers"} · {item.trajectories} trajectories</small>
+            </button>
+          ))}
+        </div>
+
+        <div className="classification-pipeline">
+          <div className="coverage-subhead"><span>Paper classification pipeline</span><small>From candidate to Atlas</small></div>
+          <ol>
+            <li><span>01</span><div><strong>Candidate screen</strong><p>Start with papers whose full text mentions ICL and multiple possible shot counts.</p></div></li>
+            <li><span>02</span><div><strong>Experiment check</strong><p>Confirm the shots are prompt demonstrations—not training-set size, retrieval depth, or another variable.</p></div></li>
+            <li><span>03</span><div><strong>Comparable evidence</strong><p>Require exact scores for at least two shot-count conditions with the task, model, dataset, and metric held comparable.</p></div></li>
+            <li><span>04</span><div><strong>Classification</strong><p>Assign input, output, operation, scope, metric direction, and evidence tier while preserving the source-table link.</p></div></li>
+            <li><span>05</span><div><strong>Analysis and audit</strong><p>Normalize direction, classify trajectory shape, record statistical support, and flag every value needing source verification.</p></div></li>
+          </ol>
+        </div>
+      </div>
     </section>
   );
 }
@@ -740,6 +813,20 @@ export default function Home() {
     });
   }
 
+  function chooseOperation(operation: string) {
+    setLens("Task");
+    setSelectedGroup(operation);
+    setQuery("");
+    setPatternFilter("All patterns");
+    setEvidenceFilter("All evidence");
+    window.requestAnimationFrame(() => {
+      document.getElementById("explorer")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }
+
   return (
     <main className="site-shell">
       <div className="ambient ambient-one" aria-hidden="true" />
@@ -768,6 +855,8 @@ export default function Home() {
       </section>
 
       <TrajectoryField trajectories={atlas.trajectories} selectedTrajectoryId={selectedTrajectoryId} onSelect={selectFromField} />
+
+      <CoverageAudit onChooseOperation={chooseOperation} />
 
       <section className="atlas-frame reveal reveal-three" id="explorer" aria-label="ICL trend explorer">
         <aside className="trend-rail">
@@ -950,9 +1039,9 @@ export default function Home() {
             <button className="modal-close" type="button" onClick={() => setShowDataNotes(false)} aria-label="Close data notes">×</button>
             <span className="section-kicker">Data & methodology</span>
             <h2 id="data-modal-title">Built to grow with the extraction.</h2>
-            <p>The interface is generated from <strong>{atlas.meta.sourceFile}</strong>. Updating the master workbook and rerunning the importer refreshes every lens, paper, trajectory, shot value, and statistical-test record.</p>
-            <div className="modal-stats"><div><strong>{atlas.meta.paperCount}</strong><span>Papers</span></div><div><strong>{atlas.meta.trajectoryCount}</strong><span>Trajectories</span></div><div><strong>{atlas.meta.resultCount}</strong><span>Shot results</span></div></div>
-            <div className="update-flow"><span>Workbook</span><i>→</i><span>Importer</span><i>→</i><span>Atlas data</span><i>→</i><span>Deploy</span></div>
+            <p>The interface is generated from <strong>{atlas.meta.sourceFile}</strong>. Papers first pass a relevance screen, then exact comparable shot-count results are extracted into the master workbook. The importer classifies the experiment and refreshes every lens, trajectory, score, and statistical-test record.</p>
+            <div className="modal-stats"><div><strong>{atlas.meta.reviewedPaperCount}</strong><span>Reviewed papers</span></div><div><strong>{atlas.meta.paperCount}</strong><span>Included papers</span></div><div><strong>{atlas.meta.resultCount}</strong><span>Shot results</span></div></div>
+            <div className="update-flow"><span>Candidate</span><i>→</i><span>Evidence check</span><i>→</i><span>Exact rows</span><i>→</i><span>Classify</span><i>→</i><span>Atlas</span></div>
             <div className="method-grid">
               <div><strong>Metric directionality</strong><p>Lower-is-better metrics are reversed only for analysis; raw reported values remain visible.</p></div>
               <div><strong>Evidence tier</strong><p>Three or more points support a trajectory shape. Two points support direction only.</p></div>

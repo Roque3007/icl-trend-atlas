@@ -23,7 +23,8 @@
 - **Initial load / in view:** the headline, trajectory field, explorer, and lower guidance reveal once; observers disconnect after reveal.
 - **Trajectory-field hover:** the nearest trajectory brightens while unrelated curves reduce opacity; the tooltip follows the nearest plotted point without causing reflow.
 - **Trajectory-field click:** the matching I/O family, paper, and trajectory become active, then the existing explorer scrolls into view.
-- **Trajectory-field filter or scale change:** the canvas redraws using the fast curve; controls provide immediate pressed-state feedback.
+- **Trajectory-field filter or scale change:** the canvas redraws using the fast curve; controls provide immediate pressed-state feedback. The logarithmic shot view uses `log(1 + shots)` so zero-shot evidence remains anchored and no point disappears during the transition.
+- **Coverage-audit reveal:** paper-weighted gap cards enter once with the standard in-view mask; the cards remain static after reveal so their ranking is easy to scan.
 - **Lens change:** group rows refresh with a short stagger while the master–detail frame stays spatially anchored.
 - **Group row hover / keyboard focus:** a 2px depth lift clarifies clickability without moving surrounding content.
 - **Paper expansion:** trajectories reveal with a masked vertical fade while the paper header stays anchored.

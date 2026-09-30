@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 from datetime import datetime, timezone
@@ -43,6 +44,47 @@ def rows_for(sheet):
         for row in rows
         if any(value is not None for value in row)
     ]
+
+
+def pipeline_counts(workbook_path: Path):
+    """Read paper-screening progress when the workbook lives inside the research project."""
+    research_dir = next(
+        (parent for parent in workbook_path.parents if (parent / "acl_multishot_high_precision.csv").exists()),
+        None,
+    )
+    if research_dir is None:
+        return {}
+
+    def csv_rows(path: Path):
+        if not path.exists():
+            return []
+        with path.open(newline="", encoding="utf-8-sig") as stream:
+            return list(csv.DictReader(stream))
+
+    candidates = csv_rows(research_dir / "acl_multishot_high_precision.csv")
+    reviewed = {}
+    review_files = sorted(research_dir.glob("batch_processor_output/batch_*/batch_paper_review.csv"))
+    review_files += sorted(research_dir.glob("compact_processor_output/batch_*/batch_paper_review.csv"))
+    review_files += sorted(research_dir.glob("coverage_processor_output/batch_*/batch_paper_review.csv"))
+    for review_file in review_files:
+        for row in csv_rows(review_file):
+            paper_id = row.get("paper_id")
+            if paper_id:
+                reviewed[paper_id] = row
+
+    compact_manifest = csv_rows(research_dir / "local_pipeline_output/compact_review_5000/compact_manifest.csv")
+    ready_queue_count = sum(row.get("anthology_id") not in reviewed for row in compact_manifest)
+    status_counts = {
+        status: sum(row.get("status") == status for row in reviewed.values())
+        for status in ("include", "exclude", "uncertain")
+    }
+    return {
+        "candidatePaperCount": len(candidates),
+        "reviewedPaperCount": len(reviewed),
+        "remainingPaperCount": max(0, len(candidates) - len(reviewed)),
+        "readyQueueCount": ready_queue_count,
+        "screeningStatusCounts": status_counts,
+    }
 
 
 def metric_group(metric):
@@ -384,6 +426,7 @@ def build_bundle(workbook_path: Path):
         )
 
     paper_ids = {row["paperId"] for row in web_trajectories if row.get("paperId")}
+    progress = pipeline_counts(workbook_path)
     return {
         "meta": {
             "schemaVersion": 2,
@@ -393,6 +436,7 @@ def build_bundle(workbook_path: Path):
             "trajectoryCount": len(web_trajectories),
             "resultCount": sum(len(row["results"]) for row in web_trajectories),
             "verificationNotice": "All current trajectories require source-table verification before publication.",
+            **progress,
         },
         "trajectories": web_trajectories,
     }
