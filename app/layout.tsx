@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "ICL Atlas — Shot-count trajectory explorer";
+const title = "ICL Atlas — In-context learning shot-count evidence";
 const description = "An interactive research atlas of published in-context learning experiments, linking shot-count trajectories to papers, source tables, models, tasks, metrics, and statistical evidence.";
 
 export async function generateMetadata(): Promise<Metadata> {

@@ -366,7 +366,7 @@ function TrajectoryDetail({
       <div className="inspector-actions">
         {trajectory.resultTableLink ? <a className="source-button" href={trajectory.resultTableLink} target="_blank" rel="noreferrer">Open table in paper <span>↗</span></a> : null}
         <button className="method-button" type="button" onClick={onDataNotes}>Methodology</button>
-        {onOpenEvidence ? <button className="evidence-button" type="button" onClick={() => onOpenEvidence(trajectory)}>Open in evidence explorer</button> : null}
+        {onOpenEvidence ? <button className="evidence-button" type="button" onClick={() => onOpenEvidence(trajectory)}>Open source evidence</button> : null}
       </div>
     </div>
   );
@@ -633,9 +633,9 @@ function TrajectoryField({
     <section className={`trajectory-field inview ${embedded ? "embedded-field" : ""}`} aria-labelledby="trajectory-field-title">
       <div className="field-heading">
         <div>
-          <span className="section-kicker">All results / Overview</span>
-          <h2 id="trajectory-field-title">All normalized trajectories</h2>
-          <p>Each curve begins at its first reported shot count and is rescaled to its largest direction-normalized change. Select a curve to inspect its exact reported scores.</p>
+          <span className="section-kicker">Normalized trajectory comparison</span>
+          <h2 id="trajectory-field-title">Trajectory shapes across experiments</h2>
+          <p>Each trajectory subtracts its first score, then divides by its largest absolute change. Scores are sign-normalized so positive values always indicate improvement. This compares trajectory shape, not effect size.</p>
         </div>
         <div className="field-summary" aria-label="Visible data summary">
           <div><strong>{prepared.length}</strong><span>trajectories</span></div>
@@ -673,7 +673,7 @@ function TrajectoryField({
       <div className="field-legend" aria-label={`Legend colored by ${colorMode}`}>
         {legend.map(([name, count]) => <span key={name}><i style={{ background: colorMode === "Pattern" ? (patternColors[name] ?? stableColor(name)) : stableColor(name) }} />{name}<small>{count}</small></span>)}
       </div>
-      <p className="field-footnote">Counts can be dominated by papers reporting many model–metric combinations. Use the paper count and the source drilldown before interpreting coverage. Log shots uses log(1 + shot count), which keeps zero-shot points visible.</p>
+      <p className="field-footnote">A single paper may contribute many model–dataset–metric trajectories, so trajectory counts are not independent study counts. The logarithmic axis uses log(1 + shots) to retain zero-shot observations.</p>
     </section>
   );
 }
@@ -698,10 +698,10 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
     <section className="coverage-audit inview" aria-labelledby="coverage-title">
       <div className="coverage-heading">
         <div>
-          <span className="section-kicker">Coverage / Next extraction</span>
-          <h2 id="coverage-title">Process the gaps, not just the next row.</h2>
+          <span className="section-kicker">Dataset coverage</span>
+          <h2 id="coverage-title">Extraction coverage by task operation</h2>
         </div>
-        <p>Coverage is ranked by independent papers rather than trajectory count. The next extraction queue can prioritize operations represented by only one or two papers.</p>
+        <p>Operations are ranked by distinct paper count. Categories supported by one or two papers are current coverage gaps, even when those papers report many trajectories.</p>
       </div>
 
       <div className="coverage-status" aria-label="Paper screening status">
@@ -713,7 +713,7 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
 
       <div className="coverage-body">
         <div className="gap-list">
-          <div className="coverage-subhead"><span>Lowest paper coverage</span><small>Click to inspect current evidence</small></div>
+          <div className="coverage-subhead"><span>Operations with the fewest papers</span><small>Select an operation to inspect its records</small></div>
           {sparseOperations.map((item, index) => (
             <button key={item.name} type="button" className="gap-row" onClick={() => onChooseOperation(item.name)}>
               <span>{String(index + 1).padStart(2, "0")}</span>
@@ -724,7 +724,7 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
         </div>
 
         <div className="classification-pipeline">
-          <div className="coverage-subhead"><span>Paper classification pipeline</span><small>From candidate to Atlas</small></div>
+          <div className="coverage-subhead"><span>Inclusion and classification procedure</span><small>Five processing stages</small></div>
           <ol>
             <li><span>01</span><div><strong>Candidate screen</strong><p>Start with papers whose full text mentions ICL and multiple possible shot counts.</p></div></li>
             <li><span>02</span><div><strong>Experiment check</strong><p>Confirm the shots are prompt demonstrations—not training-set size, retrieval depth, or another variable.</p></div></li>
@@ -914,10 +914,10 @@ export default function Home() {
       </header>
 
       <section className="hero reveal reveal-two" id="top">
-        <p className="eyebrow">Systematic evidence synthesis of in-context learning</p>
-        <h1>How model performance changes<span> as in-context examples increase.</span></h1>
+        <p className="eyebrow">In-context learning evidence dataset</p>
+        <h1>Performance by number of in-context demonstrations</h1>
         <p className="hero-copy">
-          This research atlas compiles published NLP experiments that report the same task, model, dataset, and metric at multiple demonstration counts. Metrics are direction-normalized so upward always means better, while every trajectory remains linked to its paper and source table.
+          {atlas.meta.trajectoryCount} trajectories from {atlas.meta.paperCount} NLP papers ({atlas.meta.resultCount} shot-level scores). Within each trajectory, task, model, dataset, and metric are fixed; demonstration count varies. Each record links to its source table.
         </p>
       </section>
 
@@ -933,8 +933,8 @@ export default function Home() {
             onClick={() => setWorkspaceView("comparison")}
           >
             <span>01</span>
-            <strong>Trajectory comparison</strong>
-            <small>All trajectories + selected result</small>
+            <strong>Trajectory overview</strong>
+            <small>Compare normalized paths and inspect one record</small>
           </button>
           <button
             id="evidence-tab"
@@ -946,8 +946,8 @@ export default function Home() {
             onClick={() => setWorkspaceView("evidence")}
           >
             <span>02</span>
-            <strong>Evidence explorer</strong>
-            <small>Categories, papers + shot setup</small>
+            <strong>Source evidence</strong>
+            <small>Filter papers and inspect reported shot conditions</small>
           </button>
         </div>
 
@@ -961,7 +961,7 @@ export default function Home() {
                 embedded
               />
               <aside className="trajectory-inspector comparison-inspector" aria-live="polite">
-                <div className="preview-label"><span>02</span> Selected trajectory</div>
+                <div className="preview-label"><span>02</span> Selected experiment</div>
                 {comparisonTrajectory ? (
                   <TrajectoryDetail
                     trajectory={comparisonTrajectory}
@@ -976,7 +976,7 @@ export default function Home() {
       <section className="atlas-frame workspace-panel" id="evidence-panel" role="tabpanel" aria-labelledby="evidence-tab" aria-label="ICL evidence explorer">
         <aside className="trend-rail">
           <div className="rail-heading">
-            <div><span className="section-kicker">01 / Explore</span><h2>Trend map</h2></div>
+            <div><span className="section-kicker">01 / Group selector</span><h2>Trajectory groups</h2></div>
             <span className="rail-count">{groups.length}</span>
           </div>
 
@@ -1020,7 +1020,7 @@ export default function Home() {
 
         <section className="evidence-panel">
           <div className="evidence-heading">
-            <div><span className="section-kicker">02 / Evidence</span><p className="breadcrumb">{lens} / <strong>{activeGroup?.name}</strong></p></div>
+            <div><span className="section-kicker">02 / Paper and trajectory records</span><p className="breadcrumb">Grouped by {lens}: <strong>{activeGroup?.name}</strong></p></div>
             <div className="headline-stat"><strong>{filtered.length}</strong><span>matching trajectories</span></div>
           </div>
 
@@ -1094,7 +1094,7 @@ export default function Home() {
         </section>
 
         <aside className="trajectory-inspector" aria-live="polite">
-          <div className="preview-label"><span>03</span> Shot setup</div>
+          <div className="preview-label"><span>03</span> Reported shot conditions</div>
           {selectedTrajectory ? (
             <TrajectoryDetail trajectory={selectedTrajectory} onDataNotes={() => setShowDataNotes(true)} />
           ) : <p className="no-selection">Select a trajectory to inspect its shot-by-shot curve.</p>}
@@ -1106,11 +1106,11 @@ export default function Home() {
       <CoverageAudit onChooseOperation={chooseOperation} />
 
       <section className="reading-guide inview">
-        <div><span className="section-kicker">Reading the atlas</span><h2>Patterns are descriptive.<br />Papers are the evidence.</h2></div>
+        <div><span className="section-kicker">Interpretation</span><h2>Limits of the trajectory comparison</h2></div>
         <div className="guide-grid">
-          <article><span>01</span><strong>Follow direction-normalized shape</strong><p>Higher on the normalized chart always means better, including lower-is-better metrics.</p></article>
-          <article><span>02</span><strong>Separate two-point comparisons</strong><p>Two points establish endpoint direction, but cannot establish a reversal or curved trajectory.</p></article>
-          <article><span>03</span><strong>Check the source table</strong><p>Every curve retains its exact table link and verification status for auditability.</p></article>
+          <article><span>01</span><strong>Normalized values show direction and shape</strong><p>They do not make scores from different metrics directly comparable in magnitude.</p></article>
+          <article><span>02</span><strong>Two observations show endpoint direction only</strong><p>At least three shot conditions are required to identify a reversal or non-monotonic path.</p></article>
+          <article><span>03</span><strong>Statistical support is recorded separately</strong><p>A numerical increase or decline is not treated as significant without sufficient reported test output.</p></article>
         </div>
       </section>
 

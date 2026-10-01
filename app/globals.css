@@ -22,7 +22,7 @@ a { color: inherit; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 
 .site-shell { min-height: 100vh; padding: 18px; position: relative; overflow-x: hidden; isolation: isolate; }
-.ambient { position: fixed; width: 42vw; aspect-ratio: 1; border-radius: 50%; filter: blur(80px); opacity: .18; z-index: -2; pointer-events: none; animation: drift 18s cubic-bezier(.45,0,.55,1) infinite alternate; }
+.ambient { position: fixed; width: 42vw; aspect-ratio: 1; border-radius: 50%; filter: blur(80px); opacity: .08; z-index: -2; pointer-events: none; animation: drift 18s cubic-bezier(.45,0,.55,1) infinite alternate; }
 .ambient-one { background: #60dcc2; top: -18vw; right: -9vw; }
 .ambient-two { background: #ecff86; bottom: -22vw; left: -14vw; animation-duration: 22s; animation-direction: alternate-reverse; }
 [data-motion-paused="true"] .ambient { animation-play-state: paused; }
@@ -41,11 +41,11 @@ a { color: inherit; }
 .update-button { border: 0; background: transparent; font-weight: 700; cursor: pointer; padding: 10px 0; transition: transform 220ms var(--ease-fast), letter-spacing 220ms var(--ease-fast); }
 .update-button:hover { letter-spacing: .025em; }
 
-.hero { padding: clamp(48px, 6vw, 82px) 2vw clamp(36px, 4vw, 58px); max-width: 1280px; }
+.hero { padding: clamp(42px, 5vw, 68px) 2vw clamp(32px, 3.5vw, 48px); max-width: 1120px; }
 .eyebrow, .section-kicker { text-transform: uppercase; letter-spacing: .17em; font-size: 10px; font-weight: 800; color: var(--teal); }
-.hero h1 { margin: 12px 0 18px; font-size: clamp(44px, 5.7vw, 88px); line-height: .93; letter-spacing: -.06em; max-width: 1120px; font-weight: 780; }
-.hero h1 span { color: var(--teal); display: block; font-style: italic; font-weight: 450; }
-.hero-copy { color: var(--muted); max-width: 880px; font-size: clamp(15px, 1.2vw, 19px); line-height: 1.55; margin: 0; }
+.hero h1 { margin: 12px 0 18px; font-size: clamp(38px, 4.2vw, 60px); line-height: 1.03; letter-spacing: -.045em; max-width: 900px; font-weight: 760; }
+.hero h1 span { color: inherit; display: inline; font-style: normal; font-weight: inherit; }
+.hero-copy { color: var(--muted); max-width: 900px; font-size: clamp(14px, 1.1vw, 17px); line-height: 1.6; margin: 0; }
 
 .workspace-shell { max-width: 1500px; margin: 0 auto 22px; scroll-margin-top: 16px; }
 .workspace-tabs { width: min(820px,100%); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 11px; padding: 5px; border: 1px solid var(--line); border-radius: 17px; background: rgba(255,255,255,.64); box-shadow: 0 12px 36px rgba(34,67,66,.06); }
@@ -70,7 +70,7 @@ a { color: inherit; }
 .trajectory-field { max-width: 1500px; margin: 0 auto 22px; padding: clamp(22px, 3vw, 42px); border-radius: 24px; background: var(--ink); color: white; box-shadow: 0 28px 80px rgba(16,42,48,.16); opacity: 0; transform: translate3d(0,28px,0); transition: opacity 650ms var(--ease-out), transform 650ms var(--ease-out); }
 .trajectory-field.is-visible { opacity: 1; transform: none; }
 .field-heading { display: grid; grid-template-columns: minmax(0,1.4fr) auto; align-items: end; gap: 32px; }
-.field-heading h2 { margin: 7px 0 9px; font-size: clamp(38px,4.6vw,72px); line-height: .95; letter-spacing: -.055em; }
+.field-heading h2 { margin: 7px 0 9px; font-size: clamp(34px,3.8vw,58px); line-height: 1; letter-spacing: -.045em; }
 .field-heading p { margin: 0; max-width: 720px; color: rgba(255,255,255,.56); font-size: 14px; line-height: 1.55; }
 .field-summary { display: grid; grid-template-columns: repeat(3,minmax(86px,1fr)); border: 1px solid rgba(255,255,255,.13); border-radius: 14px; overflow: hidden; }
 .field-summary div { min-width: 100px; padding: 14px 16px; border-right: 1px solid rgba(255,255,255,.11); }
@@ -107,7 +107,7 @@ a { color: inherit; }
 .coverage-audit { max-width: 1500px; margin: 0 auto 22px; padding: clamp(24px,3.2vw,46px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.62); backdrop-filter: blur(18px); box-shadow: 0 22px 60px rgba(34,67,66,.08); opacity: 0; transform: translate3d(0,24px,0); transition: opacity 650ms var(--ease-out), transform 650ms var(--ease-out); }
 .coverage-audit.is-visible { opacity: 1; transform: none; }
 .coverage-heading { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,.72fr); gap: clamp(24px,5vw,72px); align-items: end; }
-.coverage-heading h2 { margin: 9px 0 0; max-width: 780px; font-size: clamp(34px,4.5vw,68px); line-height: .96; letter-spacing: -.055em; }
+.coverage-heading h2 { margin: 9px 0 0; max-width: 780px; font-size: clamp(32px,3.8vw,54px); line-height: 1; letter-spacing: -.045em; }
 .coverage-heading > p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .coverage-status { display: grid; grid-template-columns: repeat(4,1fr); border: 1px solid var(--line); border-radius: 15px; overflow: hidden; margin: 28px 0 18px; }
 .coverage-status div { padding: 16px; border-right: 1px solid var(--line); background: rgba(244,246,241,.58); }
@@ -251,7 +251,7 @@ a { color: inherit; }
 
 .reading-guide { max-width: 1400px; margin: 0 auto; padding: clamp(90px, 12vw, 170px) 3vw 90px; display: grid; grid-template-columns: .8fr 1.4fr; gap: 6vw; opacity: 0; transform: translate3d(0,28px,0); transition: opacity 650ms var(--ease-out), transform 650ms var(--ease-out); }
 .reading-guide.is-visible { opacity: 1; transform: none; }
-.reading-guide h2 { font-size: clamp(32px, 4vw, 58px); line-height: 1; letter-spacing: -.055em; margin: 14px 0; }
+.reading-guide h2 { font-size: clamp(30px, 3.2vw, 46px); line-height: 1.05; letter-spacing: -.045em; margin: 14px 0; }
 .guide-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
 .guide-grid article { border-top: 1px solid var(--ink); padding: 14px 0; }
 .guide-grid article > span { font-size: 9px; color: var(--teal); }
@@ -326,7 +326,7 @@ a { color: inherit; }
   .dataset-download span { display: none; }
   .update-button { font-size: 10px; }
   .hero { padding: 54px 9px 38px; }
-  .hero h1 { font-size: clamp(43px, 13vw, 66px); }
+  .hero h1 { font-size: clamp(36px, 8vw, 48px); }
   .trajectory-field { padding: 20px 13px; border-radius: 18px; }
   .workspace-tabs { grid-template-columns: 1fr; }
   .comparison-inspector { border-radius: 18px; }
