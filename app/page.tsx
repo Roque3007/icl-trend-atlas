@@ -7,6 +7,7 @@ type Lens = "I/O" | "Task" | "Scope" | "Model" | "Metric" | "Pattern";
 type ScoreMode = "raw" | "normalized";
 type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
 type FieldXMode = "progress" | "shots" | "logShots";
+type WorkspaceView = "comparison" | "evidence";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 
@@ -320,6 +321,57 @@ function TrajectoryChart({ trajectory }: { trajectory: Trajectory }) {
   );
 }
 
+function TrajectoryDetail({
+  trajectory,
+  onDataNotes,
+  onOpenEvidence,
+}: {
+  trajectory: Trajectory;
+  onDataNotes: () => void;
+  onOpenEvidence?: (trajectory: Trajectory) => void;
+}) {
+  return (
+    <div className="inspector-content" key={trajectory.trajectoryId}>
+      <div className="pattern-pill" style={{ "--pattern": patternColors[trajectory.category] } as React.CSSProperties}><span /> {trajectory.category}</div>
+      <h2>{trajectory.modelName}</h2>
+      <p className="preview-context">{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}</p>
+      <TrajectoryChart trajectory={trajectory} />
+
+      <div className="preview-details">
+        <div><span>Baseline</span><strong>{formatNumber(trajectory.baselineRawScore, 3)}</strong></div>
+        <div><span>Endpoint</span><strong>{formatNumber(trajectory.endpointRawScore, 3)}</strong></div>
+        <div><span>Conditions</span><strong>{trajectory.numberOfConditions}</strong></div>
+      </div>
+
+      <div className="shot-table-wrap">
+        <div className="detail-heading"><span>Reported shot setup</span><span>{trajectory.metricDirection?.replaceAll("_", " ")}</span></div>
+        <table className="shot-table">
+          <thead><tr><th>Shots</th><th>Raw score</th><th>Step Δ</th></tr></thead>
+          <tbody>
+            {trajectory.results.map((point, index) => (
+              <tr key={`${point.shotCount}-${index}`}><td>{point.shotCount ?? "—"}</td><td>{formatNumber(point.rawScore ?? point.rawScoreReported, 3)}</td><td>{formatNumber(point.stepChange, 3)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {trajectory.statisticalTests.length > 0 ? (
+        <div className="stat-note">
+          <span>Reported statistics</span>
+          <strong>{trajectory.statisticalTests[0].testName ?? "Statistical comparison"}</strong>
+          <p>{trajectory.statisticalTests[0].description ?? trajectory.statisticalTests[0].interpretation ?? "See the paper for the reported comparison."}</p>
+        </div>
+      ) : <div className="stat-note muted-note"><span>Reported statistics</span><p>No trajectory-linked significance claim is recorded for this setup.</p></div>}
+
+      <div className="inspector-actions">
+        {trajectory.resultTableLink ? <a className="source-button" href={trajectory.resultTableLink} target="_blank" rel="noreferrer">Open table in paper <span>↗</span></a> : null}
+        <button className="method-button" type="button" onClick={onDataNotes}>Methodology</button>
+        {onOpenEvidence ? <button className="evidence-button" type="button" onClick={() => onOpenEvidence(trajectory)}>Open in evidence explorer</button> : null}
+      </div>
+    </div>
+  );
+}
+
 function quantile(values: number[], position: number) {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -334,10 +386,12 @@ function TrajectoryField({
   trajectories,
   selectedTrajectoryId,
   onSelect,
+  embedded = false,
 }: {
   trajectories: Trajectory[];
   selectedTrajectoryId: string;
   onSelect: (trajectory: Trajectory) => void;
+  embedded?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -576,12 +630,12 @@ function TrajectoryField({
   const routeCount = new Set(prepared.map((item) => item.trajectory.ioFamily)).size;
 
   return (
-    <section className="trajectory-field inview" aria-labelledby="trajectory-field-title">
+    <section className={`trajectory-field inview ${embedded ? "embedded-field" : ""}`} aria-labelledby="trajectory-field-title">
       <div className="field-heading">
         <div>
           <span className="section-kicker">All results / Overview</span>
-          <h2 id="trajectory-field-title">Trajectory field</h2>
-          <p>Every curve starts at zero and is rescaled to its own largest direction-normalized change. Compare shape here; inspect exact magnitude below.</p>
+          <h2 id="trajectory-field-title">All normalized trajectories</h2>
+          <p>Each curve begins at its first reported shot count and is rescaled to its largest direction-normalized change. Select a curve to inspect its exact reported scores.</p>
         </div>
         <div className="field-summary" aria-label="Visible data summary">
           <div><strong>{prepared.length}</strong><span>trajectories</span></div>
@@ -685,6 +739,7 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
 }
 
 export default function Home() {
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("comparison");
   const [lens, setLens] = useState<Lens>("Task");
   const [selectedGroup, setSelectedGroup] = useState(() => topGroupForLens("Task"));
   const [query, setQuery] = useState("");
@@ -749,6 +804,7 @@ export default function Home() {
   }, [filtered]);
 
   const selectedTrajectory = filtered.find((item) => item.trajectoryId === selectedTrajectoryId) ?? filtered[0];
+  const comparisonTrajectory = atlas.trajectories.find((item) => item.trajectoryId === selectedTrajectoryId) ?? atlas.trajectories[0];
   const effectiveExpandedPaper = paperGroups.some((paper) => paper.paperId === expandedPaper)
     ? expandedPaper
     : paperGroups[0]?.paperId ?? "";
@@ -798,6 +854,10 @@ export default function Home() {
   }
 
   function selectFromField(trajectory: Trajectory) {
+    setSelectedTrajectoryId(trajectory.trajectoryId);
+  }
+
+  function openEvidenceForTrajectory(trajectory: Trajectory) {
     setLens("I/O");
     setSelectedGroup(trajectory.ioFamily);
     setQuery("");
@@ -805,8 +865,9 @@ export default function Home() {
     setEvidenceFilter("All evidence");
     setExpandedPaper(trajectory.paperId);
     setSelectedTrajectoryId(trajectory.trajectoryId);
+    setWorkspaceView("evidence");
     window.requestAnimationFrame(() => {
-      document.getElementById("explorer")?.scrollIntoView({
+      document.getElementById("research-workspace")?.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
         block: "start",
       });
@@ -814,13 +875,14 @@ export default function Home() {
   }
 
   function chooseOperation(operation: string) {
+    setWorkspaceView("evidence");
     setLens("Task");
     setSelectedGroup(operation);
     setQuery("");
     setPatternFilter("All patterns");
     setEvidenceFilter("All evidence");
     window.requestAnimationFrame(() => {
-      document.getElementById("explorer")?.scrollIntoView({
+      document.getElementById("research-workspace")?.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
         block: "start",
       });
@@ -841,24 +903,77 @@ export default function Home() {
           <span className="pulse-dot" aria-hidden="true" />
           {atlas.meta.paperCount} papers · {atlas.meta.trajectoryCount} trajectories · {atlas.meta.resultCount} shot results
         </div>
-        <MagneticButton className="update-button magnetic" onClick={() => setShowDataNotes(true)}>
-          Data & methodology <span aria-hidden="true">↗</span>
-        </MagneticButton>
+        <div className="top-actions">
+          <a className="dataset-download" href="./icl-master-extraction.xlsx" download>
+            Download dataset <span>.xlsx</span>
+          </a>
+          <MagneticButton className="update-button magnetic" onClick={() => setShowDataNotes(true)}>
+            Data & methodology <span aria-hidden="true">↗</span>
+          </MagneticButton>
+        </div>
       </header>
 
       <section className="hero reveal reveal-two" id="top">
-        <p className="eyebrow">A navigable evidence map for in-context learning</p>
-        <h1>See what happens when<span> the shot count moves.</span></h1>
+        <p className="eyebrow">Systematic evidence synthesis of in-context learning</p>
+        <h1>How model performance changes<span> as in-context examples increase.</span></h1>
         <p className="hero-copy">
-          Move from broad trends to the exact paper, prompting setup, and reported score—without losing the shape of the evidence.
+          This research atlas compiles published NLP experiments that report the same task, model, dataset, and metric at multiple demonstration counts. Metrics are direction-normalized so upward always means better, while every trajectory remains linked to its paper and source table.
         </p>
       </section>
 
-      <TrajectoryField trajectories={atlas.trajectories} selectedTrajectoryId={selectedTrajectoryId} onSelect={selectFromField} />
+      <section className="workspace-shell reveal reveal-three" id="research-workspace" aria-label="ICL Atlas research workspace">
+        <div className="workspace-tabs" role="tablist" aria-label="Research views">
+          <button
+            id="comparison-tab"
+            type="button"
+            role="tab"
+            aria-selected={workspaceView === "comparison"}
+            aria-controls="comparison-panel"
+            className={workspaceView === "comparison" ? "active" : ""}
+            onClick={() => setWorkspaceView("comparison")}
+          >
+            <span>01</span>
+            <strong>Trajectory comparison</strong>
+            <small>All trajectories + selected result</small>
+          </button>
+          <button
+            id="evidence-tab"
+            type="button"
+            role="tab"
+            aria-selected={workspaceView === "evidence"}
+            aria-controls="evidence-panel"
+            className={workspaceView === "evidence" ? "active" : ""}
+            onClick={() => setWorkspaceView("evidence")}
+          >
+            <span>02</span>
+            <strong>Evidence explorer</strong>
+            <small>Categories, papers + shot setup</small>
+          </button>
+        </div>
 
-      <CoverageAudit onChooseOperation={chooseOperation} />
-
-      <section className="atlas-frame reveal reveal-three" id="explorer" aria-label="ICL trend explorer">
+        {workspaceView === "comparison" ? (
+          <section className="workspace-panel comparison-panel" id="comparison-panel" role="tabpanel" aria-labelledby="comparison-tab">
+            <div className="comparison-layout">
+              <TrajectoryField
+                trajectories={atlas.trajectories}
+                selectedTrajectoryId={selectedTrajectoryId}
+                onSelect={selectFromField}
+                embedded
+              />
+              <aside className="trajectory-inspector comparison-inspector" aria-live="polite">
+                <div className="preview-label"><span>02</span> Selected trajectory</div>
+                {comparisonTrajectory ? (
+                  <TrajectoryDetail
+                    trajectory={comparisonTrajectory}
+                    onDataNotes={() => setShowDataNotes(true)}
+                    onOpenEvidence={openEvidenceForTrajectory}
+                  />
+                ) : <p className="no-selection">Select a trajectory to inspect its shot-by-shot curve.</p>}
+              </aside>
+            </div>
+          </section>
+        ) : (
+      <section className="atlas-frame workspace-panel" id="evidence-panel" role="tabpanel" aria-labelledby="evidence-tab" aria-label="ICL evidence explorer">
         <aside className="trend-rail">
           <div className="rail-heading">
             <div><span className="section-kicker">01 / Explore</span><h2>Trend map</h2></div>
@@ -981,46 +1096,14 @@ export default function Home() {
         <aside className="trajectory-inspector" aria-live="polite">
           <div className="preview-label"><span>03</span> Shot setup</div>
           {selectedTrajectory ? (
-            <div className="inspector-content" key={selectedTrajectory.trajectoryId}>
-              <div className="pattern-pill" style={{ "--pattern": patternColors[selectedTrajectory.category] } as React.CSSProperties}><span /> {selectedTrajectory.category}</div>
-              <h2>{selectedTrajectory.modelName}</h2>
-              <p className="preview-context">{selectedTrajectory.task}<br />{selectedTrajectory.dataset} · {selectedTrajectory.metric}</p>
-              <TrajectoryChart trajectory={selectedTrajectory} />
-
-              <div className="preview-details">
-                <div><span>Baseline</span><strong>{formatNumber(selectedTrajectory.baselineRawScore, 3)}</strong></div>
-                <div><span>Endpoint</span><strong>{formatNumber(selectedTrajectory.endpointRawScore, 3)}</strong></div>
-                <div><span>Conditions</span><strong>{selectedTrajectory.numberOfConditions}</strong></div>
-              </div>
-
-              <div className="shot-table-wrap">
-                <div className="detail-heading"><span>Reported shot setup</span><span>{selectedTrajectory.metricDirection?.replaceAll("_", " ")}</span></div>
-                <table className="shot-table">
-                  <thead><tr><th>Shots</th><th>Raw score</th><th>Step Δ</th></tr></thead>
-                  <tbody>
-                    {selectedTrajectory.results.map((point, index) => (
-                      <tr key={`${point.shotCount}-${index}`}><td>{point.shotCount ?? "—"}</td><td>{formatNumber(point.rawScore ?? point.rawScoreReported, 3)}</td><td>{formatNumber(point.stepChange, 3)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {selectedTrajectory.statisticalTests.length > 0 ? (
-                <div className="stat-note">
-                  <span>Reported statistics</span>
-                  <strong>{selectedTrajectory.statisticalTests[0].testName ?? "Statistical comparison"}</strong>
-                  <p>{selectedTrajectory.statisticalTests[0].description ?? selectedTrajectory.statisticalTests[0].interpretation ?? "See the paper for the reported comparison."}</p>
-                </div>
-              ) : <div className="stat-note muted-note"><span>Reported statistics</span><p>No trajectory-linked significance claim is recorded for this setup.</p></div>}
-
-              <div className="inspector-actions">
-                {selectedTrajectory.resultTableLink ? <a className="source-button" href={selectedTrajectory.resultTableLink} target="_blank" rel="noreferrer">Open table in paper <span>↗</span></a> : null}
-                <button className="method-button" type="button" onClick={() => setShowDataNotes(true)}>How to read this</button>
-              </div>
-            </div>
+            <TrajectoryDetail trajectory={selectedTrajectory} onDataNotes={() => setShowDataNotes(true)} />
           ) : <p className="no-selection">Select a trajectory to inspect its shot-by-shot curve.</p>}
         </aside>
       </section>
+        )}
+      </section>
+
+      <CoverageAudit onChooseOperation={chooseOperation} />
 
       <section className="reading-guide inview">
         <div><span className="section-kicker">Reading the atlas</span><h2>Patterns are descriptive.<br />Papers are the evidence.</h2></div>
@@ -1038,7 +1121,7 @@ export default function Home() {
           <section className="data-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
             <button className="modal-close" type="button" onClick={() => setShowDataNotes(false)} aria-label="Close data notes">×</button>
             <span className="section-kicker">Data & methodology</span>
-            <h2 id="data-modal-title">Built to grow with the extraction.</h2>
+            <h2 id="data-modal-title">Paper classification and analysis pipeline.</h2>
             <p>The interface is generated from <strong>{atlas.meta.sourceFile}</strong>. Papers first pass a relevance screen, then exact comparable shot-count results are extracted into the master workbook. The importer classifies the experiment and refreshes every lens, trajectory, score, and statistical-test record.</p>
             <div className="modal-stats"><div><strong>{atlas.meta.reviewedPaperCount}</strong><span>Reviewed papers</span></div><div><strong>{atlas.meta.paperCount}</strong><span>Included papers</span></div><div><strong>{atlas.meta.resultCount}</strong><span>Shot results</span></div></div>
             <div className="update-flow"><span>Candidate</span><i>→</i><span>Evidence check</span><i>→</i><span>Exact rows</span><i>→</i><span>Classify</span><i>→</i><span>Atlas</span></div>
@@ -1048,6 +1131,7 @@ export default function Home() {
               <div><strong>Statistical support</strong><p>Numerical degradation is not treated as significant unless the source reports sufficient test output.</p></div>
               <div><strong>Current limitation</strong><p>{atlas.meta.verificationNotice}</p></div>
             </div>
+            <a className="modal-download" href="./icl-master-extraction.xlsx" download>Download the master extraction workbook <span>.xlsx ↓</span></a>
             <MagneticButton className="modal-done magnetic" onClick={() => setShowDataNotes(false)}>Return to the atlas <span>→</span></MagneticButton>
           </section>
         </div>

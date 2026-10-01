@@ -19,9 +19,12 @@ test("server-renders the ICL Atlas application shell", async () => {
   const html = await response.text();
   assert.match(html, /<title>ICL Atlas/);
   assert.match(html, /Shot-count trajectory explorer/);
-  assert.match(html, /A navigable evidence map/);
-  assert.match(html, /Task/);
-  assert.match(html, /Model/);
-  assert.match(html, /Metric/);
-  assert.match(html, /Pattern/);
+  assert.match(html, /Systematic evidence synthesis/);
+  assert.match(html, /Trajectory comparison/);
+  assert.match(html, /Evidence explorer/);
+  assert.match(html, /icl-master-extraction\.xlsx/);
+  assert.match(html, /All normalized trajectories/);
+  assert.match(html, /Selected trajectory/);
+  assert.match(html, /Data &amp; methodology/);
+  assert.match(html, /Download dataset/);
 });
