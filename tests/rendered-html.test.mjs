@@ -19,7 +19,6 @@ test("server-renders the ICL Atlas application shell", async () => {
   const html = await response.text();
   assert.match(html, /<title>ICL Atlas/);
   assert.match(html, /In-context learning shot-count evidence/);
-  assert.match(html, /In-context learning evidence dataset/);
   assert.match(html, /Trajectory overview/);
   assert.match(html, /Source evidence/);
   assert.match(html, /Screening pipeline/);

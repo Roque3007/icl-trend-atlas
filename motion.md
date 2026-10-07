@@ -3,7 +3,9 @@
 ## 1. Dynamic layout guardrails
 
 - The product uses a stable master–detail frame: trend groups on the left, matching papers and trajectories in the center, and a trajectory inspector on the right.
-- The primary research workspace is divided into three persistent tabs. “Trajectory overview” keeps the aggregate field and selected trajectory side by side; “Source evidence” keeps category, paper, and shot-level evidence in one master–detail frame; “Screening pipeline” documents the reproducible file sequence and decision rules.
+- The primary research workspace is divided into three persistent tabs. “Trajectory overview” keeps the aggregate field and selected trajectory side by side; “Source evidence” keeps category, paper, and shot-level evidence in one master–detail frame; “Screening pipeline” is a static methods document with explicit inputs, outputs, procedures, and file roles.
+- The large introductory hero is removed. The dataset status in the header leads directly into the research workspace, and content uses the available viewport width.
+- The screening methods view uses rules, headings, lists, and whitespace rather than cards, accordions, shadows, or decorative containers.
 - The new trajectory field is a working surface, not decoration. Its controls remain above the canvas and wrap on small screens.
 - Content remains readable before animation begins. Motion enhances state changes and never makes the interface dependent on hover.
 - Animate only `transform`, `opacity`, canvas drawing progress, and composited effects. Never animate layout dimensions.
@@ -21,9 +23,8 @@
 
 ## 3. Exact triggers
 
-- **Initial load / in view:** the headline, trajectory field, explorer, and lower guidance reveal once; observers disconnect after reveal.
+- **Initial load / in view:** the research workspace and lower guidance reveal once; observers disconnect after reveal.
 - **Workspace tab change:** the selected panel enters with a 220ms opacity/translate transition while preserving the selected trajectory across both views. Keyboard focus remains on the activated tab.
-- **Pipeline file disclosure:** each native disclosure opens on click or keyboard activation. The browser controls expansion state, and only the disclosure marker and content opacity receive brief visual feedback; no height animation is used.
 - **Trajectory-field hover:** the nearest trajectory brightens while unrelated curves reduce opacity; the tooltip follows the nearest plotted point without causing reflow.
 - **Trajectory-field click:** the matching I/O family, paper, and trajectory become active, then the existing explorer scrolls into view.
 - **Trajectory-field filter or scale change:** the canvas redraws using the fast curve; controls provide immediate pressed-state feedback. The logarithmic shot view uses `log(1 + shots)` so zero-shot evidence remains anchored and no point disappears during the transition.

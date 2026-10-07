@@ -69,7 +69,7 @@ def pipeline_counts(workbook_path: Path):
     for review_file in review_files:
         for row in csv_rows(review_file):
             paper_id = row.get("paper_id")
-            if paper_id:
+            if paper_id and row.get("status") in {"include", "exclude", "uncertain"}:
                 reviewed[paper_id] = row
 
     compact_manifest = csv_rows(research_dir / "local_pipeline_output/compact_review_5000/compact_manifest.csv")
