@@ -7,7 +7,7 @@ type Lens = "I/O" | "Task" | "Scope" | "Model" | "Metric" | "Pattern";
 type ScoreMode = "raw" | "normalized";
 type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
 type FieldXMode = "progress" | "shots" | "logShots";
-type WorkspaceView = "comparison" | "evidence";
+type WorkspaceView = "comparison" | "evidence" | "pipeline";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 
@@ -622,8 +622,9 @@ function TrajectoryField({
       setTooltip(null);
       return;
     }
+    const rect = event.currentTarget.getBoundingClientRect();
     setHoveredId(nearest.trajectory.trajectoryId);
-    setTooltip({ x: event.clientX, y: event.clientY, trajectory: nearest.trajectory, score: nearest.score, shot: nearest.shot });
+    setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, trajectory: nearest.trajectory, score: nearest.score, shot: nearest.shot });
   }
 
   const paperCount = new Set(prepared.map((item) => item.trajectory.paperId)).size;
@@ -657,12 +658,27 @@ function TrajectoryField({
         <button type="button" className={`median-toggle ${showMedian ? "active" : ""}`} onClick={() => setShowMedian((value) => !value)} aria-pressed={showMedian}>Median + middle 50%</button>
       </div>
 
-      <div className="field-canvas" ref={containerRef} onPointerMove={handlePointerMove} onPointerLeave={() => { setHoveredId(""); setTooltip(null); }} onClick={() => { const selected = prepared.find((item) => item.trajectory.trajectoryId === hoveredId); if (selected) onSelect(selected.trajectory); }}>
+      <div
+        className="field-canvas"
+        ref={containerRef}
+        role="button"
+        tabIndex={0}
+        aria-label="Interactive trajectory field. Select a highlighted trajectory to inspect it."
+        onPointerMove={handlePointerMove}
+        onPointerLeave={() => { setHoveredId(""); setTooltip(null); }}
+        onClick={() => { const selected = prepared.find((item) => item.trajectory.trajectoryId === hoveredId); if (selected) onSelect(selected.trajectory); }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          const selected = prepared.find((item) => item.trajectory.trajectoryId === hoveredId) ?? prepared[0];
+          if (selected) onSelect(selected.trajectory);
+        }}
+      >
         <canvas ref={canvasRef} aria-label={`Normalized shapes for ${prepared.length} experimental trajectories`} />
         <div className="field-y-label" aria-hidden="true">Normalized shape</div>
         <div className="field-x-label" aria-hidden="true">{xMode === "progress" ? "Relative shot progression" : xMode === "logShots" ? "Reported shot count · log(1 + shots)" : "Reported shot count"}</div>
         {tooltip ? (
-          <div className="field-tooltip" style={{ left: tooltip.x - (containerRef.current?.getBoundingClientRect().left ?? 0), top: tooltip.y - (containerRef.current?.getBoundingClientRect().top ?? 0) }}>
+          <div className="field-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
             <span>{tooltip.trajectory.taskSubtype} · {tooltip.shot} shots</span>
             <strong>{tooltip.trajectory.modelName}</strong>
             <small>{tooltip.trajectory.ioFamily} · shape {tooltip.score > 0 ? "+" : ""}{tooltip.score.toFixed(2)}</small>
@@ -674,6 +690,218 @@ function TrajectoryField({
         {legend.map(([name, count]) => <span key={name}><i style={{ background: colorMode === "Pattern" ? (patternColors[name] ?? stableColor(name)) : stableColor(name) }} />{name}<small>{count}</small></span>)}
       </div>
       <p className="field-footnote">A single paper may contribute many model–dataset–metric trajectories, so trajectory counts are not independent study counts. The logarithmic axis uses log(1 + shots) to retain zero-shot observations.</p>
+    </section>
+  );
+}
+
+const pipelineStages = [
+  {
+    number: "01",
+    title: "Candidate corpus",
+    purpose: "Defines the paper-level sampling frame. A row indicates eligibility for detailed screening, not final inclusion in the extracted dataset.",
+    files: [
+      {
+        path: "acl_multishot_high_precision.csv",
+        role: "Candidate-paper register",
+        description: "Stores one record per candidate paper, including ACL Anthology identifiers, bibliographic metadata, PDF locations, and shot-count signals detected during the earlier corpus screen.",
+        input: "Full-text screening results from the broader ACL corpus.",
+        output: "The ordered candidate list used by every downstream batch processor.",
+      },
+    ],
+  },
+  {
+    number: "02",
+    title: "Deterministic PDF screening",
+    purpose: "Prioritizes pages likely to contain comparable shot-count results. This stage uses fixed text rules and does not make an inclusion decision.",
+    files: [
+      {
+        path: "local_pipeline/run_local_pipeline.sh",
+        role: "Local-stage orchestrator",
+        description: "Runs page screening followed by conservative table extraction with fixed input and output locations, making the local procedure repeatable from the command line.",
+        input: "Candidate register and locally stored paper PDFs.",
+        output: "Screening and extraction directories with machine-readable summaries.",
+      },
+      {
+        path: "local_pipeline/screen_local.py",
+        role: "Page-level evidence prioritization",
+        description: "Extracts PDF text and scores pages using explicit shot-count expressions, demonstration terminology, metric names, table or figure references, statistical terminology, and numeric density. High-priority pages score at least 38 and contain at least two shot counts; medium- and low-priority thresholds are 20 and 10.",
+        input: "Paper PDFs plus candidate metadata.",
+        output: "paper_screening.csv, page_candidates.csv, extracted page text, and screening_summary.json.",
+      },
+      {
+        path: "paper_screening.csv",
+        role: "Paper-level screening disposition",
+        description: "Records whether the rule-based screen found table-oriented evidence, ambiguous evidence, or little evidence. These labels prioritize review and are not study-exclusion judgments.",
+        input: "Aggregated page scores for each paper.",
+        output: "candidate_table_review, ambiguous_review, or low_evidence status per paper.",
+      },
+      {
+        path: "page_candidates.csv",
+        role: "Candidate-page index",
+        description: "Retains the highest-scoring evidence pages, adjacent context pages, the matched feature counts, and a page-specific source link for audit and downstream parsing.",
+        input: "Scored pages from screen_local.py.",
+        output: "A bounded set of page records for structural extraction.",
+      },
+    ],
+  },
+  {
+    number: "03",
+    title: "Structural extraction and context assembly",
+    purpose: "Converts prioritized PDF pages into compact evidence blocks while preserving uncertain structures for later semantic review.",
+    files: [
+      {
+        path: "local_pipeline/extract_local.py",
+        role: "Conservative table-row parser",
+        description: "Uses PDF layout text to identify headers containing two or more shot-count columns and numeric rows aligned beneath them. Automatic acceptance is restricted to rows whose shot columns match the paper-level signal and whose caption identifies one metric; all other blocks remain review candidates.",
+        input: "page_candidates.csv, candidate-page PDFs, and expected shot counts.",
+        output: "table_blocks.csv, auto_rows.csv, accepted_rows.csv, manual_review_queue.csv, page_errors.csv, and extraction_summary.json.",
+      },
+      {
+        path: "local_pipeline/prepare_compact_queue.py",
+        role: "Evidence-context constructor",
+        description: "Merges nearby table blocks and assembles a bounded per-paper context containing title, abstract, detected shot counts, source-linked table excerpts, and up to two statistical passages from unused pages.",
+        input: "Table blocks, page candidates, extracted page text, and candidate metadata.",
+        output: "contexts/*.txt, compact_manifest.csv, ids.txt, no_structured_block_ids.txt, and compact_summary.json.",
+      },
+      {
+        path: "compact_manifest.csv",
+        role: "Semantic-review queue",
+        description: "Indexes each compact paper context, its estimated prompt size, detected evidence features, and source metadata. Processed papers can be skipped so later runs append new coverage without repeating completed work.",
+        input: "One compact evidence context per candidate paper.",
+        output: "An ordered, resumable queue for batch extraction.",
+      },
+    ],
+  },
+  {
+    number: "04",
+    title: "Schema-constrained semantic review",
+    purpose: "Determines whether the excerpts support a valid within-experiment comparison and extracts exact values without estimating unreported data.",
+    files: [
+      {
+        path: "compact_processor/run_compact_batch.sh",
+        role: "Batch-processing entry point",
+        description: "Selects a bounded paper range, runs extraction, builds the review workbook, adds source hyperlinks, and executes post-build verification.",
+        input: "compact_manifest.csv plus the selected contexts/*.txt files.",
+        output: "A self-contained batch directory with cached paper decisions, CSV files, summary JSON, and XLSX workbook.",
+      },
+      {
+        path: "compact_processor/process_compact.py",
+        role: "Batch controller and validator",
+        description: "Constructs one bounded batch prompt, reuses valid cached decisions, enforces a prompt-size ceiling, invokes schema-constrained extraction, verifies paper order and identifiers, and converts included trajectories into tabular rows.",
+        input: "Selected compact contexts, extraction instructions, and JSON schema.",
+        output: "Per-paper extraction.json files, batch_extracted_rows.csv, batch_paper_review.csv, and batch_summary.json.",
+      },
+      {
+        path: "compact_processor/prompts/extract_batch.txt",
+        role: "Eligibility and extraction protocol",
+        description: "Requires at least two exact numeric results for the same task, dataset, model, and metric while only demonstration count changes. It prohibits estimating values from figures and distinguishes prompt demonstrations from training size, label count, and retrieval depth.",
+        input: "Compact paper excerpts inserted into a fixed instruction template.",
+        output: "An include, exclude, or uncertain decision with auditable trajectories when supported.",
+      },
+      {
+        path: "batch_processor/schema/extraction.schema.json",
+        role: "Structured data contract",
+        description: "Constrains the extracted representation for shot-level scores, metric directionality, uncertainty, statistical tests, tested shot pairs, effect sizes, significance decisions, and source-table coordinates.",
+        input: "Semantic extraction output.",
+        output: "Machine-validatable paper and trajectory records with no undeclared fields.",
+      },
+    ],
+  },
+  {
+    number: "05",
+    title: "Verification, integration, and publication",
+    purpose: "Checks batch integrity, integrates non-duplicate records, derives analysis variables, and produces the public Atlas data bundle.",
+    files: [
+      {
+        path: "batch_processor/scripts/verify_batch.py",
+        role: "Batch integrity check",
+        description: "Confirms required outputs exist, reconciles paper and trajectory counts with the batch summary, tests the XLSX archive, and verifies that each recorded source URL has a workbook hyperlink.",
+        input: "Batch CSV, JSON, and XLSX outputs.",
+        output: "A pass or explicit validation failure before integration.",
+      },
+      {
+        path: "batch_processor/scripts/add_xlsx_hyperlinks.py",
+        role: "Source-link preservation",
+        description: "Writes external hyperlinks into result and statistical-source cells so each extracted record can open the original PDF at the reported viewer page.",
+        input: "Batch workbook and extracted-row CSV.",
+        output: "An XLSX workbook with clickable source-page links.",
+      },
+      {
+        path: "work/master-workbook/build_master.mjs",
+        role: "Master dataset construction",
+        description: "Combines standard and compact batches, deduplicates trajectories by paper, task, dataset, model, metric, and source row, preserves raw scores, reverses lower-is-better metrics only for analysis, and derives numerical trajectory categories separately from statistical support.",
+        input: "All completed batch directories.",
+        output: "The master extraction workbook with papers, trajectories, shot-level results, statistical tests, and metric documentation.",
+      },
+      {
+        path: "icl-trend-atlas/scripts/import_workbook.py",
+        role: "Atlas data transformation",
+        description: "Reads the master workbook, assigns input/output, semantic-operation, scope, metric-family, and evidence-tier categories, computes dataset coverage, and serializes the browser-ready data object.",
+        input: "Master extraction workbook.",
+        output: "app/data/atlas.json, which drives every chart, filter, count, and source-evidence view.",
+      },
+    ],
+  },
+];
+
+function ScreeningPipeline() {
+  return (
+    <section className="pipeline-panel workspace-panel" id="pipeline-panel" role="tabpanel" aria-labelledby="pipeline-tab">
+      <div className="pipeline-heading">
+        <div>
+          <span className="section-kicker">Reproducibility / data screening</span>
+          <h2>From candidate paper to analysis-ready trajectory</h2>
+        </div>
+        <p>The workflow combines deterministic page prioritization, conservative structural parsing, schema-constrained semantic review, and batch-level validation. Files are listed in execution order.</p>
+      </div>
+
+      <div className="pipeline-status" aria-label="Current pipeline status">
+        <div><strong>{atlas.meta.candidatePaperCount}</strong><span>candidate papers</span></div>
+        <div><strong>{atlas.meta.reviewedPaperCount}</strong><span>semantically reviewed</span></div>
+        <div><strong>{atlas.meta.paperCount}</strong><span>included with exact results</span></div>
+        <div><strong>{atlas.meta.remainingPaperCount}</strong><span>awaiting review</span></div>
+      </div>
+
+      <div className="pipeline-layout">
+        <div className="pipeline-stages">
+          {pipelineStages.map((stage) => (
+            <article className="pipeline-stage" key={stage.number}>
+              <div className="stage-heading">
+                <span>{stage.number}</span>
+                <div><h3>{stage.title}</h3><p>{stage.purpose}</p></div>
+              </div>
+              <div className="file-list">
+                {stage.files.map((file, index) => (
+                  <details className="file-card" key={file.path} open={index === 0}>
+                    <summary><code>{file.path}</code><span>{file.role}</span></summary>
+                    <div className="file-card-body">
+                      <p>{file.description}</p>
+                      <dl>
+                        <div><dt>Input</dt><dd>{file.input}</dd></div>
+                        <div><dt>Output</dt><dd>{file.output}</dd></div>
+                      </dl>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <aside className="pipeline-methods" aria-label="Screening decision rules">
+          <span className="section-kicker">Decision rules</span>
+          <h3>What each stage establishes</h3>
+          <div className="method-rule"><span>Screening</span><p>Ranks pages by evidence density. It does not establish study eligibility.</p></div>
+          <div className="method-rule"><span>Inclusion</span><p>Requires exact scores at two or more shot counts with task, dataset, model, and metric held constant.</p></div>
+          <div className="method-rule"><span>Uncertainty</span><p>Papers that appear eligible but lack recoverable exact values remain <code>uncertain</code>; values are not inferred.</p></div>
+          <div className="method-rule"><span>Directionality</span><p>Raw scores remain unchanged. Lower-is-better metrics are multiplied by −1 only in the analysis score.</p></div>
+          <div className="method-rule"><span>Significance</span><p>Statistical significance is recorded only when explicitly reported or directly determined from sufficient test output.</p></div>
+          <div className="method-note">
+            <strong>Interpretive boundary</strong>
+            <p>Automated checks establish structural consistency and file integrity. They do not constitute independent verification of every value against the full paper; records retain source links and a verification status for audit.</p>
+          </div>
+        </aside>
+      </div>
     </section>
   );
 }
@@ -949,6 +1177,19 @@ export default function Home() {
             <strong>Source evidence</strong>
             <small>Filter papers and inspect reported shot conditions</small>
           </button>
+          <button
+            id="pipeline-tab"
+            type="button"
+            role="tab"
+            aria-selected={workspaceView === "pipeline"}
+            aria-controls="pipeline-panel"
+            className={workspaceView === "pipeline" ? "active" : ""}
+            onClick={() => setWorkspaceView("pipeline")}
+          >
+            <span>03</span>
+            <strong>Screening pipeline</strong>
+            <small>Review files, decision rules, and generated outputs</small>
+          </button>
         </div>
 
         {workspaceView === "comparison" ? (
@@ -972,7 +1213,7 @@ export default function Home() {
               </aside>
             </div>
           </section>
-        ) : (
+        ) : workspaceView === "evidence" ? (
       <section className="atlas-frame workspace-panel" id="evidence-panel" role="tabpanel" aria-labelledby="evidence-tab" aria-label="ICL evidence explorer">
         <aside className="trend-rail">
           <div className="rail-heading">
@@ -1100,6 +1341,8 @@ export default function Home() {
           ) : <p className="no-selection">Select a trajectory to inspect its shot-by-shot curve.</p>}
         </aside>
       </section>
+        ) : (
+          <ScreeningPipeline />
         )}
       </section>
 
