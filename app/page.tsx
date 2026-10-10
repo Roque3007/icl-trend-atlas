@@ -1088,7 +1088,7 @@ export default function Home() {
           </div>
 
           <div className="group-list">
-            {groups.map((group) => {
+            {groups.map((group, index) => {
               const selected = activeGroup?.name === group.name;
               const distribution = Object.entries(group.trajectories.reduce<Record<string, number>>((counts, trajectory) => {
                 counts[trajectory.category] = (counts[trajectory.category] ?? 0) + 1;
@@ -1149,7 +1149,7 @@ export default function Home() {
           </div>
 
           <div className="paper-list">
-            {paperGroups.map((paper) => {
+            {paperGroups.map((paper, index) => {
               const expanded = paper.paperId === effectiveExpandedPaper;
               return (
                 <article className={`paper-card ${expanded ? "expanded" : ""}`} key={paper.paperId}>
