@@ -14,15 +14,15 @@ type ResultPoint = Trajectory["results"][number];
 const lenses: Lens[] = ["I/O", "Task", "Scope", "Model", "Metric", "Pattern"];
 
 const patternColors: Record<string, string> = {
-  "Monotonic improvement": "#46d7a8",
-  "Monotonic decline": "#ff6d6d",
-  "Improve then decline": "#f7b84b",
-  "Decline then recover": "#9f8bff",
-  "Mixed / non-monotonic": "#7393a7",
-  "Flat / stable": "#a8b5bd",
-  "Two-point improvement": "#56b8df",
-  "Two-point decline": "#ff9c72",
-  "Insufficient points": "#6d7780",
+  "Monotonic improvement": "#3f6b58",
+  "Monotonic decline": "#864b50",
+  "Improve then decline": "#80663c",
+  "Decline then recover": "#59627d",
+  "Mixed / non-monotonic": "#526c79",
+  "Flat / stable": "#72787b",
+  "Two-point improvement": "#4f716f",
+  "Two-point decline": "#7d5b54",
+  "Insufficient points": "#6d7275",
 };
 
 function valueForLens(trajectory: Trajectory, lens: Lens) {
@@ -34,7 +34,7 @@ function valueForLens(trajectory: Trajectory, lens: Lens) {
   return trajectory.category;
 }
 
-const fieldPalette = ["#46d7a8", "#ff9c72", "#9f8bff", "#56b8df", "#f7b84b", "#ef6fa8", "#80c783", "#c09bff", "#54c6ba", "#f08080"];
+const fieldPalette = ["#3f5f78", "#596c7c", "#6b5b73", "#4d6d68", "#74694f", "#6e5960", "#557080", "#776956", "#5f6d77", "#68745f"];
 
 function stableColor(value: string) {
   let hash = 0;
@@ -64,60 +64,21 @@ function topGroupForLens(lens: Lens) {
 }
 
 function formatNumber(value: number | string | null, digits = 2) {
-  if (value === null || value === "") return "—";
+  if (value === null || value === "") return "NA";
   if (typeof value === "string") return value;
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: digits }).format(value);
 }
 
 function formatDelta(value: number | null) {
-  if (value === null) return "—";
+  if (value === null) return "NA";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(Math.abs(value) < 1 ? 3 : 1)}`;
 }
 
-function MagneticButton({
-  children,
-  className,
-  onClick,
-  ariaLabel,
-}: {
-  children: React.ReactNode;
-  className: string;
-  onClick?: () => void;
-  ariaLabel?: string;
-}) {
-  function move(event: React.PointerEvent<HTMLButtonElement>) {
-    if (event.pointerType === "touch") return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 8;
-    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 8;
-    event.currentTarget.style.setProperty("--mx", `${x}px`);
-    event.currentTarget.style.setProperty("--my", `${y}px`);
-  }
-
-  function reset(event: React.PointerEvent<HTMLButtonElement>) {
-    event.currentTarget.style.setProperty("--mx", "0px");
-    event.currentTarget.style.setProperty("--my", "0px");
-  }
-
-  return (
-    <button
-      className={className}
-      type="button"
-      onClick={onClick}
-      onPointerMove={move}
-      onPointerLeave={reset}
-      aria-label={ariaLabel}
-    >
-      {children}
-    </button>
-  );
-}
 
 function TrajectoryChart({ trajectory }: { trajectory: Trajectory }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
-  const lastAnimationKey = useRef("");
   const [mode, setMode] = useState<ScoreMode>("raw");
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -136,11 +97,10 @@ function TrajectoryChart({ trajectory }: { trajectory: Trajectory }) {
     const container = chartRef.current;
     if (!canvas || !container || numericPoints.length === 0) return;
 
-    let animationFrame = 0;
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    const render = (progress: number) => {
+    const render = () => {
       const rect = container.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const width = Math.max(260, rect.width);
@@ -194,69 +154,39 @@ function TrajectoryChart({ trajectory }: { trajectory: Trajectory }) {
         context.fillText(String(point.shot), xFor(point.shot), height - 18);
       }
 
-      const accent = patternColors[trajectory.category] ?? "#d8ff6a";
-      const maxSegment = Math.max(0, numericPoints.length - 1) * progress;
+      const accent = patternColors[trajectory.category] ?? "#8aa0ad";
       context.strokeStyle = accent;
       context.lineWidth = 3;
       context.lineCap = "round";
       context.lineJoin = "round";
-      context.shadowColor = accent;
-      context.shadowBlur = 16;
       context.beginPath();
       context.moveTo(xFor(numericPoints[0].shot), yFor(numericPoints[0].score));
       for (let index = 1; index < numericPoints.length; index += 1) {
-        if (index <= maxSegment) {
-          context.lineTo(xFor(numericPoints[index].shot), yFor(numericPoints[index].score));
-        } else if (index - 1 < maxSegment) {
-          const fraction = maxSegment - (index - 1);
-          const previous = numericPoints[index - 1];
-          const current = numericPoints[index];
-          context.lineTo(
-            xFor(previous.shot + (current.shot - previous.shot) * fraction),
-            yFor(previous.score + (current.score - previous.score) * fraction),
-          );
-        }
+        context.lineTo(xFor(numericPoints[index].shot), yFor(numericPoints[index].score));
       }
       context.stroke();
-      context.shadowBlur = 0;
 
       numericPoints.forEach((point, index) => {
-        if (index > Math.ceil(maxSegment)) return;
         const active = hovered === index;
         context.fillStyle = active ? "#ffffff" : accent;
         context.strokeStyle = "#102a30";
         context.lineWidth = 3;
         context.beginPath();
-        context.arc(xFor(point.shot), yFor(point.score), active ? 7 : 5, 0, Math.PI * 2);
+        context.arc(xFor(point.shot), yFor(point.score), 5, 0, Math.PI * 2);
         context.fill();
         context.stroke();
       });
     };
 
-    const animationKey = `${trajectory.trajectoryId}:${mode}`;
-    const shouldAnimate = lastAnimationKey.current !== animationKey && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    lastAnimationKey.current = animationKey;
-    if (shouldAnimate) {
-      const start = performance.now();
-      const tick = (time: number) => {
-        const linear = Math.min(1, (time - start) / 700);
-        const eased = 1 - Math.pow(1 - linear, 4);
-        render(eased);
-        if (linear < 1) animationFrame = requestAnimationFrame(tick);
-      };
-      animationFrame = requestAnimationFrame(tick);
-    } else {
-      render(1);
-    }
+    render();
 
     let resizeFrame = 0;
     const handleResize = () => {
       cancelAnimationFrame(resizeFrame);
-      resizeFrame = requestAnimationFrame(() => render(1));
+      resizeFrame = requestAnimationFrame(render);
     };
     window.addEventListener("resize", handleResize, { passive: true });
     return () => {
-      cancelAnimationFrame(animationFrame);
       cancelAnimationFrame(resizeFrame);
       window.removeEventListener("resize", handleResize);
     };
@@ -311,7 +241,7 @@ function TrajectoryChart({ trajectory }: { trajectory: Trajectory }) {
           </div>
         ) : null}
       </div>
-      <div className="axis-caption"><span>Score</span><span>Shot count →</span></div>
+      <div className="axis-caption"><span>Score</span><span>Shot count</span></div>
       <table className="sr-only">
         <caption>Shot-count scores</caption>
         <thead><tr><th>Shots</th><th>Score</th></tr></thead>
@@ -349,7 +279,7 @@ function TrajectoryDetail({
           <thead><tr><th>Shots</th><th>Raw score</th><th>Step Δ</th></tr></thead>
           <tbody>
             {trajectory.results.map((point, index) => (
-              <tr key={`${point.shotCount}-${index}`}><td>{point.shotCount ?? "—"}</td><td>{formatNumber(point.rawScore ?? point.rawScoreReported, 3)}</td><td>{formatNumber(point.stepChange, 3)}</td></tr>
+              <tr key={`${point.shotCount}-${index}`}><td>{point.shotCount ?? "NA"}</td><td>{formatNumber(point.rawScore ?? point.rawScoreReported, 3)}</td><td>{formatNumber(point.stepChange, 3)}</td></tr>
             ))}
           </tbody>
         </table>
@@ -364,7 +294,7 @@ function TrajectoryDetail({
       ) : <div className="stat-note muted-note"><span>Reported statistics</span><p>No trajectory-linked significance claim is recorded for this setup.</p></div>}
 
       <div className="inspector-actions">
-        {trajectory.resultTableLink ? <a className="source-button" href={trajectory.resultTableLink} target="_blank" rel="noreferrer">Open table in paper <span>↗</span></a> : null}
+        {trajectory.resultTableLink ? <a className="source-button" href={trajectory.resultTableLink} target="_blank" rel="noreferrer">Open table in paper</a> : null}
         <button className="method-button" type="button" onClick={onDataNotes}>Methodology</button>
         {onOpenEvidence ? <button className="evidence-button" type="button" onClick={() => onOpenEvidence(trajectory)}>Open source evidence</button> : null}
       </div>
@@ -498,7 +428,7 @@ function TrajectoryField({
       context.textBaseline = "middle";
       [-1, -0.5, 0, 0.5, 1].forEach((value) => {
         const y = yFor(value);
-        context.strokeStyle = value === 0 ? "rgba(216,255,106,.45)" : "rgba(255,255,255,.10)";
+        context.strokeStyle = value === 0 ? "rgba(220,227,232,.45)" : "rgba(255,255,255,.10)";
         context.lineWidth = value === 0 ? 1.4 : 1;
         context.beginPath();
         context.moveTo(pad.left, y);
@@ -523,7 +453,7 @@ function TrajectoryField({
       });
 
       if (showMedian && xMode === "progress" && medianSeries.length) {
-        context.fillStyle = "rgba(216,255,106,.10)";
+        context.fillStyle = "rgba(220,227,232,.10)";
         context.beginPath();
         medianSeries.forEach((point, index) => {
           const x = pad.left + point.progress * plotWidth;
@@ -560,7 +490,7 @@ function TrajectoryField({
       context.globalAlpha = 1;
 
       if (showMedian && xMode === "progress" && medianSeries.length) {
-        context.strokeStyle = "#d8ff6a";
+        context.strokeStyle = "#dce3e8";
         context.lineWidth = 2.8;
         context.beginPath();
         medianSeries.forEach((point, index) => {
@@ -689,7 +619,7 @@ function TrajectoryField({
       <div className="field-legend" aria-label={`Legend colored by ${colorMode}`}>
         {legend.map(([name, count]) => <span key={name}><i style={{ background: colorMode === "Pattern" ? (patternColors[name] ?? stableColor(name)) : stableColor(name) }} />{name}<small>{count}</small></span>)}
       </div>
-      <p className="field-footnote">A single paper may contribute many model–dataset–metric trajectories, so trajectory counts are not independent study counts. The logarithmic axis uses log(1 + shots) to retain zero-shot observations.</p>
+      <p className="field-footnote">A single paper may contribute many trajectories across models, datasets, and metrics, so trajectory counts are not independent study counts. The logarithmic axis uses log(1 + shots) to retain zero-shot observations.</p>
     </section>
   );
 }
@@ -698,6 +628,9 @@ const pipelineStages = [
   {
     number: "01",
     title: "Candidate list",
+    conciseInput: "Candidate-paper CSV with ACL Anthology IDs, titles, PDF URLs, and detected shot-count terms.",
+    conciseProcedure: "Read each record in source order and pass it to PDF review. Candidate status is not treated as an inclusion decision.",
+    conciseOutput: "Ordered paper IDs for local screening.",
     input: [
       ["acl_multishot_high_precision.csv", "One row per candidate paper, with its ACL Anthology ID, title, PDF URL, and shot-count terms detected in the full text."],
     ],
@@ -716,6 +649,9 @@ const pipelineStages = [
   {
     number: "02",
     title: "PDF page screening",
+    conciseInput: "Candidate PDFs and paper metadata.",
+    conciseProcedure: "Extract page text and rank pages using explicit shot labels, demonstration terms, metric names, table references, statistical terms, and numeric structure.",
+    conciseOutput: "Paper-level screening status and ranked candidate pages with source links.",
     input: [
       ["Paper PDFs", "The locally stored PDF for each candidate paper."],
       ["Candidate metadata", "Paper ID, title, PDF URL, and shot-count terms from the candidate CSV."],
@@ -740,6 +676,9 @@ const pipelineStages = [
   {
     number: "03",
     title: "Table detection and excerpt preparation",
+    conciseInput: "Ranked PDF pages, layout-preserving text, and detected shot counts.",
+    conciseProcedure: "Retain table passages only when numeric cells align with multiple shot-count columns; route ambiguous passages to manual review.",
+    conciseOutput: "Table blocks, a manual-review queue, and one bounded evidence excerpt per paper.",
     input: [
       ["page_candidates.csv", "Candidate page numbers and their source-page links."],
       ["Candidate PDF pages", "Layout-preserving text extracted from the selected pages."],
@@ -766,6 +705,9 @@ const pipelineStages = [
   {
     number: "04",
     title: "Eligibility review and result extraction",
+    conciseInput: "Paper evidence excerpts and the extraction schema.",
+    conciseProcedure: "Verify that shots are prompt demonstrations and require exact comparable scores for at least two shot counts. Preserve reported uncertainty, statistics, and source locations.",
+    conciseOutput: "Paper decisions, trajectory records, shot-level results, and batch workbooks.",
     input: [
       ["compact_manifest.csv", "The papers awaiting review and the path to each compact excerpt."],
       ["contexts/*.txt", "The text supplied for each paper: title, abstract, table passages, page numbers, and statistical passages."],
@@ -795,6 +737,9 @@ const pipelineStages = [
   {
     number: "05",
     title: "Validation and dataset update",
+    conciseInput: "Completed batch directories.",
+    conciseProcedure: "Check files, row counts, schema fields, and links; remove duplicate trajectories; normalize metric direction; and classify numerical shape separately from statistical support.",
+    conciseOutput: "Master extraction workbook and the JSON dataset used by the Atlas.",
     input: [
       ["Completed batch directories", "Paper decisions, extracted trajectories, summary counts, and source links from every processed batch."],
     ],
@@ -823,41 +768,43 @@ function ScreeningPipeline() {
   return (
     <section className="pipeline-panel workspace-panel" id="pipeline-panel" role="tabpanel" aria-labelledby="pipeline-tab">
       <div className="pipeline-heading">
-        <span className="section-kicker">Methods</span>
-        <h2>Screening and extraction pipeline</h2>
+        <h2>Methods: screening and extraction</h2>
+        <p>Files are processed in five stages. The table states the input, decision procedure, and output of each stage.</p>
       </div>
 
-      <dl className="pipeline-status" aria-label="Current pipeline status">
-        <div><dt>Candidate papers</dt><dd>{atlas.meta.candidatePaperCount}</dd></div>
-        <div><dt>Reviewed papers</dt><dd>{atlas.meta.reviewedPaperCount}</dd></div>
-        <div><dt>Included papers</dt><dd>{atlas.meta.paperCount}</dd></div>
-        <div><dt>Unreviewed papers</dt><dd>{atlas.meta.remainingPaperCount}</dd></div>
-      </dl>
+      <p className="pipeline-status" aria-label="Current pipeline status">
+        <strong>{atlas.meta.candidatePaperCount}</strong> candidates; <strong>{atlas.meta.reviewedPaperCount}</strong> reviewed; <strong>{atlas.meta.paperCount}</strong> included; <strong>{atlas.meta.remainingPaperCount}</strong> not yet reviewed.
+      </p>
 
-      <div className="pipeline-stages">
-        {pipelineStages.map((stage) => (
-          <section className="pipeline-stage" key={stage.number}>
-            <header className="stage-heading"><span>Stage {stage.number}</span><h3>{stage.title}</h3></header>
-            <div className="stage-io">
-              <div><h4>Input</h4>{stage.input.map(([name, description]) => <p key={name}><code>{name}</code><span>{description}</span></p>)}</div>
-              <div><h4>Output</h4>{stage.output.map(([name, description]) => <p key={name}><code>{name}</code><span>{description}</span></p>)}</div>
-            </div>
-            <div className="stage-detail">
-              <div><h4>Procedure</h4><ul>{stage.steps.map((step) => <li key={step}>{step}</li>)}</ul></div>
-              <div><h4>Files</h4><ul className="file-list">{stage.files.map(([name, description]) => <li key={name}><code>{name}</code><span>{description}</span></li>)}</ul></div>
-            </div>
-          </section>
-        ))}
+      <div className="pipeline-table-wrap">
+        <table className="pipeline-table">
+          <thead><tr><th>Stage</th><th>Input</th><th>Procedure</th><th>Output</th></tr></thead>
+          <tbody>
+            {pipelineStages.map((stage) => (
+              <tr key={stage.number}>
+                <th scope="row"><span>{stage.number}</span><strong>{stage.title}</strong></th>
+                <td>{stage.conciseInput}</td>
+                <td>{stage.conciseProcedure}</td>
+                <td>
+                  <p>{stage.conciseOutput}</p>
+                  <details>
+                    <summary>Implementation files</summary>
+                    <ul>{stage.files.map(([name, description]) => <li key={name}><code>{name}</code><span>{description}</span></li>)}</ul>
+                  </details>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <section className="pipeline-rules" aria-labelledby="pipeline-rules-title">
-        <h3 id="pipeline-rules-title">Rules applied throughout extraction</h3>
+        <h3 id="pipeline-rules-title">Inclusion and reporting rules</h3>
         <ul>
           <li>No score is estimated from a plot, bar height, color, or prose description.</li>
-          <li>A paper is included only when exact scores are available for at least two prompt demonstration counts under a comparable experimental setting.</li>
-          <li>Uncertainty intervals and statistical tests are recorded only when reported.</li>
-          <li>Every extracted trajectory retains a link to the reported source page and table or figure.</li>
-          <li>Automated validation checks files, counts, schema conformance, and links; it does not replace manual comparison with the source paper.</li>
+          <li>Inclusion requires exact scores for at least two prompt demonstration counts under a comparable experimental setting.</li>
+          <li>Uncertainty, statistical tests, and significance are recorded only when the paper reports sufficient evidence.</li>
+          <li>Every trajectory retains its source page and table or figure link and remains marked for source verification.</li>
         </ul>
       </section>
     </section>
@@ -907,17 +854,6 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
               <small>{item.papers} {item.papers === 1 ? "paper" : "papers"} · {item.trajectories} trajectories</small>
             </button>
           ))}
-        </div>
-
-        <div className="classification-pipeline">
-          <div className="coverage-subhead"><span>Inclusion and classification procedure</span><small>Five processing stages</small></div>
-          <ol>
-            <li><span>01</span><div><strong>Candidate screen</strong><p>Start with papers whose full text mentions ICL and multiple possible shot counts.</p></div></li>
-            <li><span>02</span><div><strong>Experiment check</strong><p>Confirm the shots are prompt demonstrations—not training-set size, retrieval depth, or another variable.</p></div></li>
-            <li><span>03</span><div><strong>Comparable evidence</strong><p>Require exact scores for at least two shot-count conditions with the task, model, dataset, and metric held comparable.</p></div></li>
-            <li><span>04</span><div><strong>Classification</strong><p>Assign input, output, operation, scope, metric direction, and evidence tier while preserving the source-table link.</p></div></li>
-            <li><span>05</span><div><strong>Analysis and audit</strong><p>Normalize direction, classify trajectory shape, record statistical support, and flag every value needing source verification.</p></div></li>
-          </ol>
         </div>
       </div>
     </section>
@@ -996,26 +932,6 @@ export default function Home() {
     : paperGroups[0]?.paperId ?? "";
 
   useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.1 });
-    document.querySelectorAll(".inview").forEach((element) => observer.observe(element));
-    const visibility = () => {
-      document.documentElement.dataset.motionPaused = String(document.hidden);
-    };
-    document.addEventListener("visibilitychange", visibility);
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", visibility);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!showDataNotes) return;
     const close = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShowDataNotes(false);
@@ -1077,10 +993,7 @@ export default function Home() {
 
   return (
     <main className="site-shell" id="top">
-      <div className="ambient ambient-one" aria-hidden="true" />
-      <div className="ambient ambient-two" aria-hidden="true" />
-
-      <header className="topbar reveal reveal-one">
+      <header className="topbar">
         <a className="wordmark" href="#top" aria-label="ICL Atlas home">
           <span className="mark">IA</span>
           <span>ICL ATLAS</span>
@@ -1093,13 +1006,11 @@ export default function Home() {
           <a className="dataset-download" href="./icl-master-extraction.xlsx" download>
             Download dataset <span>.xlsx</span>
           </a>
-          <MagneticButton className="update-button magnetic" onClick={() => setShowDataNotes(true)}>
-            Data & methodology <span aria-hidden="true">↗</span>
-          </MagneticButton>
+          <button className="update-button" type="button" onClick={() => setShowDataNotes(true)}>Data and methodology</button>
         </div>
       </header>
 
-      <section className="workspace-shell reveal reveal-three" id="research-workspace" aria-label="ICL Atlas research workspace">
+      <section className="workspace-shell" id="research-workspace" aria-label="ICL Atlas research workspace">
         <div className="workspace-tabs" role="tablist" aria-label="Research views">
           <button
             id="comparison-tab"
@@ -1177,7 +1088,7 @@ export default function Home() {
           </div>
 
           <div className="group-list">
-            {groups.map((group, index) => {
+            {groups.map((group) => {
               const selected = activeGroup?.name === group.name;
               const distribution = Object.entries(group.trajectories.reduce<Record<string, number>>((counts, trajectory) => {
                 counts[trajectory.category] = (counts[trajectory.category] ?? 0) + 1;
@@ -1189,7 +1100,6 @@ export default function Home() {
                   type="button"
                   className={`group-row ${selected ? "selected" : ""}`}
                   onClick={() => chooseGroup(group.name)}
-                  style={{ "--delay": `${index * 35}ms` } as React.CSSProperties}
                 >
                   <span className="group-index">{String(index + 1).padStart(2, "0")}</span>
                   <span className="group-body">
@@ -1199,7 +1109,6 @@ export default function Home() {
                       {distribution.map(([category, count]) => <span key={category} style={{ flex: count, background: patternColors[category] ?? "#6d7780" }} />)}
                     </span>
                   </span>
-                  <span className="row-arrow" aria-hidden="true">↗</span>
                 </button>
               );
             })}
@@ -1240,10 +1149,10 @@ export default function Home() {
           </div>
 
           <div className="paper-list">
-            {paperGroups.map((paper, index) => {
+            {paperGroups.map((paper) => {
               const expanded = paper.paperId === effectiveExpandedPaper;
               return (
-                <article className={`paper-card ${expanded ? "expanded" : ""}`} key={paper.paperId} style={{ "--delay": `${index * 55}ms` } as React.CSSProperties}>
+                <article className={`paper-card ${expanded ? "expanded" : ""}`} key={paper.paperId}>
                   <button className="paper-header" type="button" onClick={() => setExpandedPaper(expanded ? "" : paper.paperId)} aria-expanded={expanded}>
                     <span className="paper-index">{String(index + 1).padStart(2, "0")}</span>
                     <span className="paper-title-block">
@@ -1257,15 +1166,14 @@ export default function Home() {
                     <div className="trajectory-list">
                       <div className="paper-source-row">
                         <span>{new Set(paper.trajectories.map((item) => item.modelName)).size} models · {new Set(paper.trajectories.map((item) => item.metric)).size} metrics</span>
-                        {paper.trajectories[0].resultTableLink ? <a href={paper.trajectories[0].resultTableLink} target="_blank" rel="noreferrer">Open source table ↗</a> : null}
+                        {paper.trajectories[0].resultTableLink ? <a href={paper.trajectories[0].resultTableLink} target="_blank" rel="noreferrer">Open source table</a> : null}
                       </div>
                       {paper.trajectories.map((trajectory) => {
                         const selected = trajectory.trajectoryId === selectedTrajectory?.trajectoryId;
                         return (
                           <button key={trajectory.trajectoryId} type="button" className={`trajectory-row ${selected ? "selected" : ""}`} onClick={() => setSelectedTrajectoryId(trajectory.trajectoryId)}>
-                            <span className="trajectory-accent" style={{ background: patternColors[trajectory.category] }} />
                             <span className="trajectory-main"><strong>{trajectory.modelName}</strong><span>{trajectory.dataset} · {trajectory.metric}</span></span>
-                            <span className="trajectory-shots">{trajectory.lowestShot} → {trajectory.highestShot}<small>shots</small></span>
+                            <span className="trajectory-shots">{trajectory.lowestShot} to {trajectory.highestShot}<small>shots</small></span>
                             <span className="trajectory-change">{formatDelta(trajectory.normalizedEndpointChange)}</span>
                           </button>
                         );
@@ -1304,25 +1212,25 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="footer inview"><span>ICL Atlas · schema v{atlas.meta.schemaVersion}</span><span>Source refreshed {new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(atlas.meta.generatedAt))}</span></footer>
+      <footer className="footer"><span>ICL Atlas · schema v{atlas.meta.schemaVersion}</span><span>This static site does not collect or transmit personal data.</span><span>Source refreshed {new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(atlas.meta.generatedAt))}</span></footer>
 
       {showDataNotes ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setShowDataNotes(false); }}>
           <section className="data-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
             <button className="modal-close" type="button" onClick={() => setShowDataNotes(false)} aria-label="Close data notes">×</button>
-            <span className="section-kicker">Data & methodology</span>
-            <h2 id="data-modal-title">Paper classification and analysis pipeline.</h2>
-            <p>The interface is generated from <strong>{atlas.meta.sourceFile}</strong>. Papers first pass a relevance screen, then exact comparable shot-count results are extracted into the master workbook. The importer classifies the experiment and refreshes every lens, trajectory, score, and statistical-test record.</p>
+            <h2 id="data-modal-title">Data and methodology</h2>
+            <p>The interface is generated from <strong>{atlas.meta.sourceFile}</strong>. A paper enters the dataset only when the source provides exact comparable results for at least two prompt demonstration counts.</p>
             <div className="modal-stats"><div><strong>{atlas.meta.reviewedPaperCount}</strong><span>Reviewed papers</span></div><div><strong>{atlas.meta.paperCount}</strong><span>Included papers</span></div><div><strong>{atlas.meta.resultCount}</strong><span>Shot results</span></div></div>
-            <div className="update-flow"><span>Candidate</span><i>→</i><span>Evidence check</span><i>→</i><span>Exact rows</span><i>→</i><span>Classify</span><i>→</i><span>Atlas</span></div>
-            <div className="method-grid">
-              <div><strong>Metric directionality</strong><p>Lower-is-better metrics are reversed only for analysis; raw reported values remain visible.</p></div>
-              <div><strong>Evidence tier</strong><p>Three or more points support a trajectory shape. Two points support direction only.</p></div>
-              <div><strong>Statistical support</strong><p>Numerical degradation is not treated as significant unless the source reports sufficient test output.</p></div>
-              <div><strong>Current limitation</strong><p>{atlas.meta.verificationNotice}</p></div>
+            <dl className="method-list">
+              <div><dt>Metric directionality</dt><dd>Lower-is-better metrics are reversed only for analysis; raw reported values remain visible.</dd></div>
+              <div><dt>Evidence tier</dt><dd>Three or more points support a trajectory shape. Two points support direction only.</dd></div>
+              <div><dt>Statistical support</dt><dd>Numerical degradation is not treated as significant unless the source reports sufficient test output.</dd></div>
+              <div><dt>Verification status</dt><dd>{atlas.meta.verificationNotice}</dd></div>
+            </dl>
+            <div className="modal-actions">
+              <a className="modal-download" href="./icl-master-extraction.xlsx" download>Download the master extraction workbook (.xlsx)</a>
+              <button className="modal-done" type="button" onClick={() => setShowDataNotes(false)}>Close</button>
             </div>
-            <a className="modal-download" href="./icl-master-extraction.xlsx" download>Download the master extraction workbook <span>.xlsx ↓</span></a>
-            <MagneticButton className="modal-done magnetic" onClick={() => setShowDataNotes(false)}>Return to the atlas <span>→</span></MagneticButton>
           </section>
         </div>
       ) : null}

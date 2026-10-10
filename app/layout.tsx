@@ -1,19 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const title = "ICL Atlas — In-context learning shot-count evidence";
+const title = "ICL Atlas: In-context learning shot-count evidence";
 const description = "An interactive research atlas of published in-context learning experiments, linking shot-count trajectories to papers, source tables, models, tasks, metrics, and statistical evidence.";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -44,11 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
