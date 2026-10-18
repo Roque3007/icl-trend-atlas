@@ -1,6 +1,6 @@
 # ICL Atlas
 
-An interactive explorer for shot-count trajectories extracted from in-context learning papers. It supports four entry points—task, model, metric, and monotonicity pattern—then drills from an aggregate trend into papers, trajectories, and individual shot results.
+An interactive explorer for shot-count trajectories extracted from in-context learning papers. It supports task, model-family, metric, and monotonicity analyses, then drills from an aggregate result into papers, trajectories, individual shot results, and source tables.
 
 ## Run locally
 
@@ -39,9 +39,24 @@ Python needs `openpyxl`:
 python3 -m pip install openpyxl
 ```
 
+To regenerate the manual-review queue from the workbook and the 355-paper
+candidate list, run:
+
+```bash
+npm run data:review-queue
+```
+
+The queue preserves existing paper decisions. It prioritizes uncertain records
+by the evidence problem that requires review, followed by candidates that have
+not yet received a paper-level decision.
+
 ## Data interpretation
 
 - `normalized` chart mode reverses lower-is-better metrics so upward always means improvement.
+- The cross-category matrix averages trajectories within each paper before comparing papers, preventing papers with many extracted rows from dominating a cell.
 - Two-point records describe endpoint direction but do not establish a curved trajectory.
 - Statistical support is shown only when reported test output is available.
 - Source links remain attached to each trajectory for verification.
+
+The canonical model and task fields, aggregation thresholds, and taxonomy
+versioning policy are documented in [docs/data-taxonomy.md](docs/data-taxonomy.md).
