@@ -3,15 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import atlas from "./data/atlas.json";
 
-type Lens = "I/O" | "Task" | "Scope" | "Model" | "Metric" | "Pattern";
+type Lens = "I/O" | "Task" | "Scope" | "Model family" | "Metric" | "Pattern";
 type ScoreMode = "raw" | "normalized";
 type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
 type FieldXMode = "progress" | "shots" | "logShots";
+type MatrixRowMode = "I/O pair" | "Operation";
 type WorkspaceView = "comparison" | "evidence" | "pipeline";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 
-const lenses: Lens[] = ["I/O", "Task", "Scope", "Model", "Metric", "Pattern"];
+const lenses: Lens[] = ["I/O", "Task", "Scope", "Model family", "Metric", "Pattern"];
 
 const patternColors: Record<string, string> = {
   "Monotonic improvement": "#3f6b58",
@@ -29,7 +30,9 @@ function valueForLens(trajectory: Trajectory, lens: Lens) {
   if (lens === "I/O") return trajectory.ioFamily;
   if (lens === "Task") return trajectory.taskGroup;
   if (lens === "Scope") return trajectory.semanticScope;
-  if (lens === "Model") return trajectory.modelType;
+  // Group by a canonical family here; raw model names and reported types remain
+  // searchable and visible in each trajectory so normalization is reversible.
+  if (lens === "Model family") return trajectory.modelFamily;
   if (lens === "Metric") return trajectory.metricGroup;
   return trajectory.category;
 }
@@ -264,7 +267,7 @@ function TrajectoryDetail({
     <div className="inspector-content" key={trajectory.trajectoryId}>
       <div className="pattern-pill" style={{ "--pattern": patternColors[trajectory.category] } as React.CSSProperties}><span /> {trajectory.category}</div>
       <h2>{trajectory.modelName}</h2>
-      <p className="preview-context">{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}</p>
+      <p className="preview-context">{trajectory.modelFamily} · {trajectory.modelArchitecture}<br />{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}</p>
       <TrajectoryChart trajectory={trajectory} />
 
       <div className="preview-details">
@@ -310,6 +313,115 @@ function quantile(values: number[], position: number) {
   const upper = Math.ceil(index);
   if (lower === upper) return sorted[lower];
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
+}
+
+function EvidenceMatrix({
+  trajectories,
+  onInspect,
+}: {
+  trajectories: Trajectory[];
+  onInspect: (rowMode: MatrixRowMode, rowName: string, modelFamily: string) => void;
+}) {
+  const [rowMode, setRowMode] = useState<MatrixRowMode>("I/O pair");
+
+  const matrix = useMemo(() => {
+    const rowFor = (trajectory: Trajectory) => rowMode === "I/O pair" ? trajectory.ioFamily : trajectory.semanticOperation;
+    const paperSets = new Map<string, Set<string>>();
+    const cells = new Map<string, Trajectory[]>();
+
+    for (const trajectory of trajectories) {
+      if (!trajectory.modelFamily || !trajectory.endpointOutcome || trajectory.endpointOutcome === "Unknown") continue;
+      const row = rowFor(trajectory);
+      const family = trajectory.modelFamily;
+      const rowKey = `row:${row}`;
+      const familyKey = `family:${family}`;
+      const cellKey = `${row}\u0000${family}`;
+      for (const key of [rowKey, familyKey]) {
+        const papers = paperSets.get(key) ?? new Set<string>();
+        papers.add(trajectory.paperId);
+        paperSets.set(key, papers);
+      }
+      const values = cells.get(cellKey) ?? [];
+      values.push(trajectory);
+      cells.set(cellKey, values);
+    }
+
+    const rows = [...new Set(trajectories.map(rowFor))]
+      .sort((a, b) => (paperSets.get(`row:${b}`)?.size ?? 0) - (paperSets.get(`row:${a}`)?.size ?? 0) || a.localeCompare(b));
+    const families = [...new Set(trajectories.map((trajectory) => trajectory.modelFamily))]
+      .filter(Boolean)
+      .sort((a, b) => (paperSets.get(`family:${b}`)?.size ?? 0) - (paperSets.get(`family:${a}`)?.size ?? 0) || a.localeCompare(b));
+
+    const summaries = new Map<string, { helpedRate: number; papers: number; trajectories: number; status: string }>();
+    for (const [key, values] of cells) {
+      const byPaper = new Map<string, Trajectory[]>();
+      for (const trajectory of values) {
+        const paperValues = byPaper.get(trajectory.paperId) ?? [];
+        paperValues.push(trajectory);
+        byPaper.set(trajectory.paperId, paperValues);
+      }
+      // Average within each paper before averaging across papers. This stops a
+      // single paper with many metrics or model variants from dominating a cell.
+      const paperRates = [...byPaper.values()].map((paperTrajectories) => (
+        paperTrajectories.filter((trajectory) => trajectory.endpointOutcome === "Improved").length / paperTrajectories.length
+      ));
+      const helpedRate = paperRates.reduce((sum, value) => sum + value, 0) / paperRates.length;
+      const papers = byPaper.size;
+      const status = papers < 3 ? "insufficient" : helpedRate >= 2 / 3 ? "aided" : helpedRate <= 1 / 3 ? "harmed" : "mixed";
+      summaries.set(key, { helpedRate, papers, trajectories: values.length, status });
+    }
+    return { rows, families, summaries };
+  }, [rowMode, trajectories]);
+
+  return (
+    <section className="evidence-matrix" aria-labelledby="evidence-matrix-title">
+      <div className="matrix-heading">
+        <div>
+          <span className="section-kicker">Paper-weighted endpoint analysis</span>
+          <h2 id="evidence-matrix-title">Where additional shots help</h2>
+          <p>Each paper receives equal weight inside an input-output or operation and model-family cell. Select a cell to inspect its source trajectories.</p>
+        </div>
+        <div className="matrix-switch" role="group" aria-label="Matrix row grouping">
+          <button type="button" className={rowMode === "I/O pair" ? "active" : ""} onClick={() => setRowMode("I/O pair")}>I/O pair</button>
+          <button type="button" className={rowMode === "Operation" ? "active" : ""} onClick={() => setRowMode("Operation")}>Operation</button>
+        </div>
+      </div>
+
+      <div className="matrix-scroll">
+        <table className="matrix-table">
+          <thead><tr><th>{rowMode}</th>{matrix.families.map((family) => <th key={family}>{family}</th>)}</tr></thead>
+          <tbody>
+            {matrix.rows.map((row) => (
+              <tr key={row}>
+                <th scope="row">{row}</th>
+                {matrix.families.map((family) => {
+                  const summary = matrix.summaries.get(`${row}\u0000${family}`);
+                  if (!summary) return <td key={family} className="matrix-empty">—</td>;
+                  return (
+                    <td key={family}>
+                      <button
+                        type="button"
+                        className={`matrix-cell ${summary.status}`}
+                        onClick={() => onInspect(rowMode, row, family)}
+                        aria-label={`${row}, ${family}: ${Math.round(summary.helpedRate * 100)} percent paper-weighted improved endpoints across ${summary.papers} papers and ${summary.trajectories} trajectories`}
+                      >
+                        <strong>{Math.round(summary.helpedRate * 100)}%</strong>
+                        <span>{summary.papers}p · {summary.trajectories}t</span>
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="matrix-legend" aria-label="Evidence matrix legend">
+        <span><i className="aided" />Mostly aided</span><span><i className="mixed" />Mixed</span><span><i className="harmed" />Mostly harmed</span><span><i className="insufficient" />Fewer than 3 papers</span>
+      </div>
+      <p className="matrix-note">Percentages are descriptive, not significance claims. Aided means at least two-thirds paper-weighted improved endpoints; harmed means one-third or fewer. Cells with fewer than three papers remain insufficient regardless of the percentage.</p>
+    </section>
+  );
 }
 
 function TrajectoryField({
@@ -841,7 +953,7 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
         <div><strong>{meta.reviewedPaperCount}</strong><span>reviewed of {meta.candidatePaperCount}</span></div>
         <div><strong>{meta.paperCount}</strong><span>included with exact multi-shot results</span></div>
         <div><strong>{meta.remainingPaperCount}</strong><span>candidate papers remaining</span></div>
-        <div><strong>{meta.readyQueueCount}</strong><span>ready in the compact queue</span></div>
+        <div><strong>{meta.screeningStatusCounts.uncertain}</strong><span>uncertain decisions for manual review</span></div>
       </div>
 
       <div className="coverage-body">
@@ -900,6 +1012,8 @@ export default function Home() {
         trajectory.dataset,
         trajectory.modelName,
         trajectory.modelType,
+        trajectory.modelFamily,
+        trajectory.modelArchitecture,
         trajectory.metric,
       ].join(" ").toLowerCase();
       const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
@@ -991,6 +1105,23 @@ export default function Home() {
     });
   }
 
+  function inspectMatrixCell(rowMode: MatrixRowMode, rowName: string, modelFamily: string) {
+    // The matrix and evidence explorer share the same canonical dimensions.
+    // Carrying both selections across makes every aggregate traceable to papers.
+    setLens(rowMode === "I/O pair" ? "I/O" : "Task");
+    setSelectedGroup(rowName);
+    setQuery(modelFamily);
+    setPatternFilter("All patterns");
+    setEvidenceFilter("All evidence");
+    setWorkspaceView("evidence");
+    window.requestAnimationFrame(() => {
+      document.getElementById("research-workspace")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }
+
   return (
     <main className="site-shell" id="top">
       <header className="topbar">
@@ -1070,6 +1201,7 @@ export default function Home() {
                 ) : <p className="no-selection">Select a trajectory to inspect its shot-by-shot curve.</p>}
               </aside>
             </div>
+            <EvidenceMatrix trajectories={atlas.trajectories} onInspect={inspectMatrixCell} />
           </section>
         ) : workspaceView === "evidence" ? (
       <section className="atlas-frame workspace-panel" id="evidence-panel" role="tabpanel" aria-labelledby="evidence-tab" aria-label="ICL evidence explorer">
@@ -1212,7 +1344,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="footer"><span>ICL Atlas · schema v{atlas.meta.schemaVersion}</span><span>This static site does not collect or transmit personal data.</span><span>Source refreshed {new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(atlas.meta.generatedAt))}</span></footer>
+      <footer className="footer"><span>ICL Atlas · schema v{atlas.meta.schemaVersion} · taxonomy v{atlas.meta.taxonomyVersion}</span><span>This static site does not collect or transmit personal data.</span><span>Source refreshed {new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(atlas.meta.generatedAt))}</span></footer>
 
       {showDataNotes ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setShowDataNotes(false); }}>
@@ -1229,6 +1361,7 @@ export default function Home() {
             </dl>
             <div className="modal-actions">
               <a className="modal-download" href="./icl-master-extraction.xlsx" download>Download the master extraction workbook (.xlsx)</a>
+              <a className="modal-download" href="./manual-review-queue.csv" download>Download the manual-review queue (.csv)</a>
               <button className="modal-done" type="button" onClick={() => setShowDataNotes(false)}>Close</button>
             </div>
           </section>

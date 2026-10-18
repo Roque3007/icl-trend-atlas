@@ -24,7 +24,10 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Screening pipeline/);
   assert.match(html, /icl-master-extraction\.xlsx/);
   assert.match(html, /Trajectory shapes across experiments/);
+  assert.match(html, /Where additional shots help/);
+  assert.match(html, /paper-weighted improved endpoints/);
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?3/);
 });
