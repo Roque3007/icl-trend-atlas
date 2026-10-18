@@ -25,6 +25,10 @@ PATTERN_LABELS = {
     "insufficient_points": "Insufficient points",
 }
 
+# Increment this value whenever grouping rules change. The version is written to
+# atlas.json so analyses can state which taxonomy produced their categories.
+TAXONOMY_VERSION = 3
+
 
 def clean(value):
     if value is None:
@@ -114,6 +118,96 @@ def metric_group(metric):
     return "Other"
 
 
+def model_taxonomy(model_name, model_type):
+    """Return non-competing model dimensions while preserving the raw fields.
+
+    Papers mix vendor families, architectures, prompting methods, and complete
+    pipelines inside ``model_type``. Keeping family and architecture separate
+    prevents labels such as "LLM" and "decoder-only LLM" from appearing as if
+    they were different model families in the evidence explorer.
+    """
+    name = str(model_name or "").strip()
+    kind = str(model_type or "").strip()
+    text = f"{name} {kind}".lower()
+
+    composite = (
+        "+" in name
+        or " within " in name.lower()
+        or "two-stage" in name.lower()
+        or "pipeline" in kind.lower()
+    )
+    if composite:
+        family = "Composite pipeline"
+    elif any(token in text for token in ("gpt-neo", "gpt-j")):
+        family = "GPT-Neo / GPT-J"
+    elif any(token in text for token in ("chatgpt", "gpt", "davinci")):
+        family = "OpenAI GPT"
+    elif "llama" in text:
+        family = "Meta Llama"
+    elif any(token in text for token in ("mistral", "ministral", "voxtral")):
+        family = "Mistral"
+    elif "qwen" in text:
+        family = "Qwen"
+    elif "gemini" in text:
+        family = "Google Gemini"
+    elif "gemma" in text:
+        family = "Google Gemma"
+    elif any(token in text for token in ("flan", "t5", "tk-instruct", "ul2")):
+        family = "T5 / FLAN"
+    elif any(token in text for token in ("roberta", "bert")):
+        family = "BERT / RoBERTa"
+    elif "claude" in text:
+        family = "Anthropic Claude"
+    elif "pythia" in text:
+        family = "Pythia"
+    elif "eurollm" in text:
+        family = "EuroLLM"
+    elif "dolly" in text:
+        family = "Dolly"
+    elif any(token in text for token in ("flamingo", "re-vilm")):
+        family = "Flamingo / Re-ViLM"
+    elif "nllb" in text:
+        family = "NLLB"
+    elif not name:
+        family = "Unspecified"
+    else:
+        family = "Other named model"
+
+    if composite or any(token in kind.lower() for token in ("pipeline", "filtering", "approach")):
+        architecture = "Composite pipeline"
+    elif any(token in text for token in ("audio-language", "voxtral")):
+        architecture = "Audio-language model"
+    elif any(token in text for token in ("multimodal", "vision-language", "visual language", "flamingo", "re-vilm")):
+        architecture = "Multimodal model"
+    elif any(token in text for token in ("masked language", "roberta", "bert")):
+        architecture = "Encoder-only model"
+    elif any(token in text for token in ("encoder-decoder", "nmt", "flan", "t5", "nllb")):
+        architecture = "Encoder-decoder model"
+    elif any(
+        token in text
+        for token in (
+            "decoder-only",
+            "causal language",
+            "gpt",
+            "llama",
+            "mistral",
+            "qwen",
+            "gemini",
+            "gemma",
+            "claude",
+            "pythia",
+            "dolly",
+        )
+    ):
+        architecture = "Decoder-only model"
+    elif "language model" in text or kind.lower() == "llm":
+        architecture = "Unspecified language model"
+    else:
+        architecture = "Other / unclear"
+
+    return {"modelFamily": family, "modelArchitecture": architecture}
+
+
 def task_taxonomy(task):
     """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
@@ -132,6 +226,14 @@ def task_taxonomy(task):
             "outputType": "Answer",
             "semanticOperation": "Question answering",
             "taskSubtype": "Audio question answering",
+            "semanticScope": "Cross-modal / compositional",
+        }
+    if "image captioning" in text:
+        return {
+            "inputType": "Image",
+            "outputType": "Text",
+            "semanticOperation": "Grounded generation",
+            "taskSubtype": "Image captioning",
             "semanticScope": "Cross-modal / compositional",
         }
     if "table question answering" in text:
@@ -158,6 +260,14 @@ def task_taxonomy(task):
             "taskSubtype": "Market commentary generation",
             "semanticScope": "Context-grounded",
         }
+    if "summarization" in text:
+        return {
+            "inputType": "Conversation" if "dialogue" in text else "Text",
+            "outputType": "Text",
+            "semanticOperation": "Summarization",
+            "taskSubtype": "Medical dialogue summarization" if "medical dialogue" in text else "Summarization",
+            "semanticScope": "Context-grounded",
+        }
     if "visual step" in text or "cross-modal step" in text:
         return {
             "inputType": "Visual sequence",
@@ -182,6 +292,22 @@ def task_taxonomy(task):
             "taskSubtype": "Named entity recognition",
             "semanticScope": "Local / span",
         }
+    if "negation-scope" in text or "semantic-role annotation" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Span label(s)",
+            "semanticOperation": "Span labeling / extraction",
+            "taskSubtype": "Negation scope resolution" if "negation" in text else "Semantic-role annotation",
+            "semanticScope": "Local / span",
+        }
+    if "information extraction" in text or "properties extraction" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Structured record(s)",
+            "semanticOperation": "Structured extraction",
+            "taskSubtype": "Scientific information extraction",
+            "semanticScope": "Context-grounded",
+        }
     if "intervention extraction" in text:
         return {
             "inputType": "Text",
@@ -205,6 +331,57 @@ def task_taxonomy(task):
             "semanticOperation": "Translation / transformation",
             "taskSubtype": "ASR correction",
             "semanticScope": "Context-grounded",
+        }
+    if "argument claim clarification" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Text",
+            "semanticOperation": "Rewriting / transformation",
+            "taskSubtype": "Claim clarification",
+            "semanticScope": "Context-grounded",
+        }
+    if "definition modeling" in text:
+        return {
+            "inputType": "Term + context",
+            "outputType": "Text",
+            "semanticOperation": "Definition generation",
+            "taskSubtype": "Definition modeling",
+            "semanticScope": "Context-grounded",
+        }
+    if "word-level autocompletion" in text:
+        return {
+            "inputType": "Text prefix",
+            "outputType": "Text",
+            "semanticOperation": "Completion",
+            "taskSubtype": "Word-level autocompletion",
+            "semanticScope": "Local / span",
+        }
+    if "logical parsing" in text:
+        return {
+            "inputType": "Text",
+            "outputType": "Structured representation",
+            "semanticOperation": "Semantic parsing",
+            "taskSubtype": "Logical parsing",
+            "semanticScope": "Compositional",
+        }
+    if any(
+        token in text
+        for token in (
+            "arithmetic reasoning",
+            "commonsense reasoning",
+            "word-problem solving",
+            "mathematics problem solving",
+            "linear-function arithmetic",
+            "reasoning with scratchpad",
+            "constraint programming model generation",
+        )
+    ):
+        return {
+            "inputType": "Problem text",
+            "outputType": "Answer",
+            "semanticOperation": "Reasoning / problem solving",
+            "taskSubtype": str(task or "Reasoning"),
+            "semanticScope": "Compositional",
         }
     if "entailment" in text and "explanation" in text:
         return {
@@ -238,6 +415,14 @@ def task_taxonomy(task):
             "taskSubtype": "Paraphrase detection",
             "semanticScope": "Relational",
         }
+    if "conditional semantic textual similarity" in text:
+        return {
+            "inputType": "Text pair + condition",
+            "outputType": "Scalar score",
+            "semanticOperation": "Similarity / matching",
+            "taskSubtype": "Conditional semantic textual similarity",
+            "semanticScope": "Relational",
+        }
     if "question answering" in text:
         return {
             "inputType": "Question + context",
@@ -253,6 +438,30 @@ def task_taxonomy(task):
             "semanticOperation": "Open-ended generation",
             "taskSubtype": "Explanation generation",
             "semanticScope": "Context-grounded",
+        }
+    if "short answer scoring" in text or "llm-as-a-judge" in text:
+        return {
+            "inputType": "Answer + evaluation context",
+            "outputType": "Score",
+            "semanticOperation": "Evaluation / scoring",
+            "taskSubtype": "Short answer scoring" if "short answer" in text else "LLM-as-a-judge evaluation",
+            "semanticScope": "Context-grounded",
+        }
+    if "multiple-choice evaluation" in text:
+        return {
+            "inputType": "Question + choices",
+            "outputType": "Answer",
+            "semanticOperation": "Question answering",
+            "taskSubtype": "Multiple-choice evaluation",
+            "semanticScope": "Instance-level",
+        }
+    if "average across" in text or "nlu (average" in text:
+        return {
+            "inputType": "Mixed benchmark tasks",
+            "outputType": "Aggregate score",
+            "semanticOperation": "Benchmark aggregate",
+            "taskSubtype": str(task or "Benchmark aggregate"),
+            "semanticScope": "Suite-level",
         }
     if "moral foundation" in text:
         return {
@@ -277,6 +486,14 @@ def task_taxonomy(task):
             "outputType": "Label",
             "semanticOperation": "Classification",
             "taskSubtype": subtype,
+            "semanticScope": "Instance-level",
+        }
+    if any(token in text for token in ("smishing detection", "news categorization")):
+        return {
+            "inputType": "Text",
+            "outputType": "Label",
+            "semanticOperation": "Classification",
+            "taskSubtype": "Smishing detection" if "smishing" in text else "News categorization",
             "semanticScope": "Instance-level",
         }
     return {
@@ -369,6 +586,7 @@ def build_bundle(workbook_path: Path):
         trajectory_id = str(row.get("trajectory_id") or "")
         pattern = str(row.get("numerical_pattern") or "insufficient_points")
         taxonomy = task_taxonomy(row.get("task"))
+        model = model_taxonomy(row.get("model_name"), row.get("model_type"))
         normalized_change = row.get("normalized_endpoint_change")
         if normalized_change is None:
             endpoint_outcome = "Unknown"
@@ -395,6 +613,9 @@ def build_bundle(workbook_path: Path):
                 "dataset": row.get("dataset"),
                 "modelName": row.get("model_name"),
                 "modelType": row.get("model_type"),
+                "modelTypeRaw": row.get("model_type"),
+                "modelFamily": model["modelFamily"],
+                "modelArchitecture": model["modelArchitecture"],
                 "metric": row.get("metric"),
                 "metricGroup": metric_group(row.get("metric")),
                 "metricDirection": row.get("metric_direction"),
@@ -430,6 +651,7 @@ def build_bundle(workbook_path: Path):
     return {
         "meta": {
             "schemaVersion": 2,
+            "taxonomyVersion": TAXONOMY_VERSION,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "sourceFile": workbook_path.name,
             "paperCount": len(paper_ids),
