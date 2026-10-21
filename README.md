@@ -54,6 +54,7 @@ not yet received a paper-level decision.
 
 - `normalized` chart mode reverses lower-is-better metrics so upward always means improvement.
 - The cross-category matrix averages trajectories within each paper before comparing papers, preventing papers with many extracted rows from dominating a cell.
+- Architecture is analyzed separately from model family. Parameter counts are included only when explicitly present in the extracted model label; missing sizes are not inferred.
 - Two-point records describe endpoint direction but do not establish a curved trajectory.
 - Statistical support is shown only when reported test output is available.
 - Source links remain attached to each trajectory for verification.

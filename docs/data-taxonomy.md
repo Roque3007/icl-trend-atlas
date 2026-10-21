@@ -17,11 +17,17 @@ competing categories.
   `OpenAI GPT`, `Meta Llama`, or `T5 / FLAN`.
 - `modelArchitecture` is an independent structural category, such as
   `Decoder-only model` or `Encoder-decoder model`.
+- `modelParameterMillions` records a numeric parameter count only when the
+  extracted model label explicitly states one, such as `7B` or `600M`.
+- `modelParameterGroup` places explicit counts into fixed ranges for analysis.
+  Missing values remain `Not reported` rather than being inferred from aliases.
 
 The raw fields remain available in every trajectory. A new family should be
 added only when the source data supports a stable, mutually exclusive mapping.
 Composite systems are kept under `Composite pipeline` because assigning them
-to one component family would misrepresent the tested system.
+to one component family would misrepresent the tested system. They do not
+receive a single parameter count because one component's size would not
+describe the complete pipeline.
 
 ## Task fields
 
@@ -64,4 +70,5 @@ links back to the underlying trajectories and source-table references.
 The importer writes `taxonomyVersion` to `atlas.json`. Increment this value
 whenever a grouping rule changes so exported analyses can identify which
 taxonomy produced their categories. Taxonomy version 3 introduced the model
-family/architecture separation and expanded task coverage.
+family/architecture separation and expanded task coverage. Version 4 added
+explicit-only parameter extraction and fixed parameter-scale ranges.

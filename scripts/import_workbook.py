@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 3
+TAXONOMY_VERSION = 4
 
 
 def clean(value):
@@ -206,6 +207,62 @@ def model_taxonomy(model_name, model_type):
         architecture = "Other / unclear"
 
     return {"modelFamily": family, "modelArchitecture": architecture}
+
+
+def reported_model_parameters(model_name, model_family):
+    """Extract a parameter count only when the model label states one.
+
+    This intentionally does not look up or infer sizes for aliases such as
+    ``T5-base`` or proprietary model names. Composite pipelines also remain
+    unassigned because one component's size would not describe the full system.
+    """
+    if model_family == "Composite pipeline":
+        return {
+            "modelParameterMillions": None,
+            "modelParameterLabel": None,
+            "modelParameterGroup": "Not reported",
+            "modelParameterSource": "not_reported",
+        }
+
+    matches = re.findall(
+        r"(?i)(?<![\w.])(\d+(?:\.\d+)?)\s*([bm])\b",
+        str(model_name or ""),
+    )
+    values = {
+        float(number) * (1000 if unit.lower() == "b" else 1)
+        for number, unit in matches
+    }
+    if len(values) != 1:
+        return {
+            "modelParameterMillions": None,
+            "modelParameterLabel": None,
+            "modelParameterGroup": "Not reported",
+            "modelParameterSource": "not_reported",
+        }
+
+    millions = values.pop()
+    if millions < 1000:
+        label = f"{millions:g}M"
+        group = "Under 1B"
+    else:
+        label = f"{millions / 1000:g}B"
+        if millions < 7000:
+            group = "1B–<7B"
+        elif millions < 13000:
+            group = "7B–<13B"
+        elif millions < 30000:
+            group = "13B–<30B"
+        elif millions < 70000:
+            group = "30B–<70B"
+        else:
+            group = "70B and above"
+
+    return {
+        "modelParameterMillions": millions,
+        "modelParameterLabel": label,
+        "modelParameterGroup": group,
+        "modelParameterSource": "explicit_model_label",
+    }
 
 
 def task_taxonomy(task):
@@ -587,6 +644,7 @@ def build_bundle(workbook_path: Path):
         pattern = str(row.get("numerical_pattern") or "insufficient_points")
         taxonomy = task_taxonomy(row.get("task"))
         model = model_taxonomy(row.get("model_name"), row.get("model_type"))
+        parameters = reported_model_parameters(row.get("model_name"), model["modelFamily"])
         normalized_change = row.get("normalized_endpoint_change")
         if normalized_change is None:
             endpoint_outcome = "Unknown"
@@ -616,6 +674,10 @@ def build_bundle(workbook_path: Path):
                 "modelTypeRaw": row.get("model_type"),
                 "modelFamily": model["modelFamily"],
                 "modelArchitecture": model["modelArchitecture"],
+                "modelParameterMillions": parameters["modelParameterMillions"],
+                "modelParameterLabel": parameters["modelParameterLabel"],
+                "modelParameterGroup": parameters["modelParameterGroup"],
+                "modelParameterSource": parameters["modelParameterSource"],
                 "metric": row.get("metric"),
                 "metricGroup": metric_group(row.get("metric")),
                 "metricDirection": row.get("metric_direction"),

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import atlas from "./data/atlas.json";
 
-type Lens = "I/O" | "Task" | "Scope" | "Model family" | "Metric" | "Pattern";
+type Lens = "I/O" | "Task" | "Scope" | "Model family" | "Architecture" | "Parameters" | "Metric" | "Pattern";
 type ScoreMode = "raw" | "normalized";
 type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
 type FieldXMode = "progress" | "shots" | "logShots";
@@ -12,7 +12,7 @@ type WorkspaceView = "comparison" | "evidence" | "pipeline";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 
-const lenses: Lens[] = ["I/O", "Task", "Scope", "Model family", "Metric", "Pattern"];
+const lenses: Lens[] = ["I/O", "Task", "Model family", "Architecture", "Parameters", "Metric", "Scope", "Pattern"];
 
 const patternColors: Record<string, string> = {
   "Monotonic improvement": "#3f6b58",
@@ -33,6 +33,8 @@ function valueForLens(trajectory: Trajectory, lens: Lens) {
   // Group by a canonical family here; raw model names and reported types remain
   // searchable and visible in each trajectory so normalization is reversible.
   if (lens === "Model family") return trajectory.modelFamily;
+  if (lens === "Architecture") return trajectory.modelArchitecture;
+  if (lens === "Parameters") return trajectory.modelParameterGroup;
   if (lens === "Metric") return trajectory.metricGroup;
   return trajectory.category;
 }
@@ -267,7 +269,7 @@ function TrajectoryDetail({
     <div className="inspector-content" key={trajectory.trajectoryId}>
       <div className="pattern-pill" style={{ "--pattern": patternColors[trajectory.category] } as React.CSSProperties}><span /> {trajectory.category}</div>
       <h2>{trajectory.modelName}</h2>
-      <p className="preview-context">{trajectory.modelFamily} · {trajectory.modelArchitecture}<br />{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}</p>
+      <p className="preview-context">{trajectory.modelFamily} · {trajectory.modelArchitecture} · {trajectory.modelParameterLabel ?? "parameters not reported"}<br />{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}</p>
       <TrajectoryChart trajectory={trajectory} />
 
       <div className="preview-details">
@@ -420,6 +422,115 @@ function EvidenceMatrix({
         <span><i className="aided" />Mostly aided</span><span><i className="mixed" />Mixed</span><span><i className="harmed" />Mostly harmed</span><span><i className="insufficient" />Fewer than 3 papers</span>
       </div>
       <p className="matrix-note">Percentages are descriptive, not significance claims. Aided means at least two-thirds paper-weighted improved endpoints; harmed means one-third or fewer. Cells with fewer than three papers remain insufficient regardless of the percentage.</p>
+    </section>
+  );
+}
+
+const parameterGroupOrder = ["Under 1B", "1B–<7B", "7B–<13B", "13B–<30B", "30B–<70B", "70B and above", "Not reported"];
+
+function ModelScaleAnalysis({
+  trajectories,
+  onInspect,
+}: {
+  trajectories: Trajectory[];
+  onInspect: (lens: "Architecture" | "Parameters", group: string) => void;
+}) {
+  const analysis = useMemo(() => {
+    const summarize = (values: Trajectory[]) => {
+      const byPaper = new Map<string, Trajectory[]>();
+      for (const trajectory of values) {
+        if (!trajectory.endpointOutcome || trajectory.endpointOutcome === "Unknown") continue;
+        const paperValues = byPaper.get(trajectory.paperId) ?? [];
+        paperValues.push(trajectory);
+        byPaper.set(trajectory.paperId, paperValues);
+      }
+      // The endpoint rate is averaged within papers first so papers with many
+      // extracted metrics do not receive more influence than smaller studies.
+      const paperRates = [...byPaper.values()].map((paperTrajectories) => (
+        paperTrajectories.filter((trajectory) => trajectory.endpointOutcome === "Improved").length / paperTrajectories.length
+      ));
+      const helpedRate = paperRates.length
+        ? paperRates.reduce((sum, value) => sum + value, 0) / paperRates.length
+        : 0;
+      return {
+        papers: byPaper.size,
+        trajectories: values.length,
+        helpedRate,
+        parameterCoverage: values.filter((trajectory) => trajectory.modelParameterMillions !== null).length / values.length,
+      };
+    };
+
+    const groupBy = (keyFor: (trajectory: Trajectory) => string) => {
+      const groups = new Map<string, Trajectory[]>();
+      for (const trajectory of trajectories) {
+        const key = keyFor(trajectory);
+        const values = groups.get(key) ?? [];
+        values.push(trajectory);
+        groups.set(key, values);
+      }
+      return [...groups.entries()].map(([name, values]) => ({ name, ...summarize(values) }));
+    };
+
+    const architectures = groupBy((trajectory) => trajectory.modelArchitecture)
+      .sort((a, b) => b.papers - a.papers || b.trajectories - a.trajectories || a.name.localeCompare(b.name));
+    const parameters = groupBy((trajectory) => trajectory.modelParameterGroup)
+      .sort((a, b) => parameterGroupOrder.indexOf(a.name) - parameterGroupOrder.indexOf(b.name));
+    const knownParameters = trajectories.filter((trajectory) => trajectory.modelParameterMillions !== null);
+    return {
+      architectures,
+      parameters,
+      knownTrajectories: knownParameters.length,
+      knownPapers: new Set(knownParameters.map((trajectory) => trajectory.paperId)).size,
+    };
+  }, [trajectories]);
+
+  const renderRate = (rate: number, papers: number) => (
+    <><strong>{Math.round(rate * 100)}%</strong>{papers < 3 ? <small>insufficient</small> : null}</>
+  );
+
+  return (
+    <section className="model-scale-analysis" aria-labelledby="model-scale-title">
+      <div className="model-scale-heading">
+        <div>
+          <span className="section-kicker">Model characteristics</span>
+          <h2 id="model-scale-title">Architecture and parameter scale</h2>
+        </div>
+        <p>Architecture is available for every trajectory. Parameter count is included only when the extracted model label states an explicit value.</p>
+      </div>
+
+      <div className="model-scale-coverage">
+        <strong>{analysis.knownTrajectories} / {trajectories.length}</strong>
+        <span>trajectories with an explicit parameter count · {analysis.knownPapers} papers</span>
+      </div>
+
+      <div className="model-scale-grid">
+        <div className="model-scale-table-wrap">
+          <h3>Architecture</h3>
+          <table className="model-scale-table">
+            <thead><tr><th>Type</th><th>Papers</th><th>Traj.</th><th>Improved</th><th>Size reported</th></tr></thead>
+            <tbody>{analysis.architectures.map((row) => (
+              <tr key={row.name}>
+                <th scope="row"><button type="button" onClick={() => onInspect("Architecture", row.name)}>{row.name}</button></th>
+                <td>{row.papers}</td><td>{row.trajectories}</td><td>{renderRate(row.helpedRate, row.papers)}</td><td>{Math.round(row.parameterCoverage * 100)}%</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+
+        <div className="model-scale-table-wrap">
+          <h3>Reported parameter count</h3>
+          <table className="model-scale-table">
+            <thead><tr><th>Range</th><th>Papers</th><th>Traj.</th><th>Improved</th></tr></thead>
+            <tbody>{analysis.parameters.map((row) => (
+              <tr key={row.name}>
+                <th scope="row"><button type="button" onClick={() => onInspect("Parameters", row.name)}>{row.name}</button></th>
+                <td>{row.papers}</td><td>{row.trajectories}</td><td>{renderRate(row.helpedRate, row.papers)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+      <p className="model-scale-note">Improved is the paper-weighted share of trajectories whose final tested shot condition exceeds their initial condition after metric-direction normalization. It is descriptive, not a significance test. Parameter ranges are not inferred for aliases or proprietary models.</p>
     </section>
   );
 }
@@ -1014,6 +1125,8 @@ export default function Home() {
         trajectory.modelType,
         trajectory.modelFamily,
         trajectory.modelArchitecture,
+        trajectory.modelParameterLabel,
+        trajectory.modelParameterGroup,
         trajectory.metric,
       ].join(" ").toLowerCase();
       const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
@@ -1122,6 +1235,21 @@ export default function Home() {
     });
   }
 
+  function inspectModelDimension(nextLens: "Architecture" | "Parameters", group: string) {
+    setLens(nextLens);
+    setSelectedGroup(group);
+    setQuery("");
+    setPatternFilter("All patterns");
+    setEvidenceFilter("All evidence");
+    setWorkspaceView("evidence");
+    window.requestAnimationFrame(() => {
+      document.getElementById("research-workspace")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }
+
   return (
     <main className="site-shell" id="top">
       <header className="topbar">
@@ -1202,6 +1330,7 @@ export default function Home() {
               </aside>
             </div>
             <EvidenceMatrix trajectories={atlas.trajectories} onInspect={inspectMatrixCell} />
+            <ModelScaleAnalysis trajectories={atlas.trajectories} onInspect={inspectModelDimension} />
           </section>
         ) : workspaceView === "evidence" ? (
       <section className="atlas-frame workspace-panel" id="evidence-panel" role="tabpanel" aria-labelledby="evidence-tab" aria-label="ICL evidence explorer">

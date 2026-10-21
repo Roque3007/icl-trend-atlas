@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-21
+
+### Model architecture and parameter scale
+
+- Added architecture and parameter-count groupings to Source evidence.
+- Added a compact analysis section reporting papers, trajectories, and
+  paper-weighted endpoint improvement by architecture and parameter range.
+- Extracted parameter counts only when the model label explicitly states a
+  value. Aliases, proprietary models, and composite pipelines remain marked
+  `Not reported` to avoid unsupported inference.
+- Added direct links from every architecture and parameter row to its source
+  trajectories.
+- Incremented the data taxonomy to version 4.
+
 ## 2026-10-18
 
 ### Model and task normalization
