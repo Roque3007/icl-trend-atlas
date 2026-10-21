@@ -28,7 +28,26 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 4
+TAXONOMY_VERSION = 5
+
+
+# These mappings are limited to unambiguous public checkpoint names. The URLs
+# document the reference checkpoint; they do not imply that a paper reported
+# the parameter count or used an unchanged copy of that checkpoint.
+CHECKPOINT_SIZE_REFERENCES = {
+    "flan_t5": {
+        "small": (77, "https://huggingface.co/google/flan-t5-small"),
+        "base": (250, "https://github.com/google-research/text-to-text-transfer-transformer/blob/main/released_checkpoints.md"),
+        "large": (800, "https://github.com/google-research/text-to-text-transfer-transformer/blob/main/released_checkpoints.md"),
+        "xl": (3000, "https://huggingface.co/google/flan-t5-xl"),
+        "xxl": (11000, "https://huggingface.co/google/flan-t5-xxl"),
+    },
+    "t5": {
+        "small": (60, "https://github.com/google-research/text-to-text-transfer-transformer/blob/main/README.md"),
+        "base": (220, "https://github.com/google-research/text-to-text-transfer-transformer/blob/main/README.md"),
+        "large": (770, "https://github.com/google-research/text-to-text-transfer-transformer/blob/main/README.md"),
+    },
+}
 
 
 def clean(value):
@@ -176,6 +195,12 @@ def model_taxonomy(model_name, model_type):
 
     if composite or any(token in kind.lower() for token in ("pipeline", "filtering", "approach")):
         architecture = "Composite pipeline"
+    elif family in {"Anthropic Claude", "Google Gemini"} or re.search(
+        r"(?i)\b(?:gpt[- ]?(?:3\.5|4|5)\w*|chatgpt)\b", name
+    ):
+        # A product name alone does not establish a disclosed structural
+        # architecture. GPT-4's technical report explicitly withholds it.
+        architecture = "Architecture not established"
     elif any(token in text for token in ("audio-language", "voxtral")):
         architecture = "Audio-language model"
     elif any(token in text for token in ("multimodal", "vision-language", "visual language", "flamingo", "re-vilm")):
@@ -209,38 +234,7 @@ def model_taxonomy(model_name, model_type):
     return {"modelFamily": family, "modelArchitecture": architecture}
 
 
-def reported_model_parameters(model_name, model_family):
-    """Extract a parameter count only when the model label states one.
-
-    This intentionally does not look up or infer sizes for aliases such as
-    ``T5-base`` or proprietary model names. Composite pipelines also remain
-    unassigned because one component's size would not describe the full system.
-    """
-    if model_family == "Composite pipeline":
-        return {
-            "modelParameterMillions": None,
-            "modelParameterLabel": None,
-            "modelParameterGroup": "Not reported",
-            "modelParameterSource": "not_reported",
-        }
-
-    matches = re.findall(
-        r"(?i)(?<![\w.])(\d+(?:\.\d+)?)\s*([bm])\b",
-        str(model_name or ""),
-    )
-    values = {
-        float(number) * (1000 if unit.lower() == "b" else 1)
-        for number, unit in matches
-    }
-    if len(values) != 1:
-        return {
-            "modelParameterMillions": None,
-            "modelParameterLabel": None,
-            "modelParameterGroup": "Not reported",
-            "modelParameterSource": "not_reported",
-        }
-
-    millions = values.pop()
+def parameter_record(millions, source, source_url=None, reference_model=None):
     if millions < 1000:
         label = f"{millions:g}M"
         group = "Under 1B"
@@ -256,27 +250,72 @@ def reported_model_parameters(model_name, model_family):
             group = "30B–<70B"
         else:
             group = "70B and above"
-
     return {
         "modelParameterMillions": millions,
-        "modelParameterLabel": label,
+        "modelParameterLabel": f"≈{label}" if source == "matched_public_checkpoint" else label,
         "modelParameterGroup": group,
-        "modelParameterSource": "explicit_model_label",
+        "modelParameterSource": source,
+        "modelParameterSourceUrl": source_url,
+        "modelParameterReferenceModel": reference_model,
     }
+
+
+def unknown_parameter_record():
+    return {
+        "modelParameterMillions": None,
+        "modelParameterLabel": None,
+        "modelParameterGroup": "Not reported",
+        "modelParameterSource": "not_reported",
+        "modelParameterSourceUrl": None,
+        "modelParameterReferenceModel": None,
+    }
+
+
+def reported_model_parameters(model_name, model_family):
+    """Resolve explicit sizes or an unambiguous public checkpoint alias."""
+    if model_family == "Composite pipeline":
+        return unknown_parameter_record()
+
+    matches = re.findall(
+        r"(?i)(?<![\w.])(\d+(?:\.\d+)?)\s*([bm])\b",
+        str(model_name or ""),
+    )
+    values = {
+        float(number) * (1000 if unit.lower() == "b" else 1)
+        for number, unit in matches
+    }
+    if len(values) == 1:
+        return parameter_record(values.pop(), "explicit_model_label")
+    if len(values) > 1:
+        return unknown_parameter_record()
+
+    name = str(model_name or "")
+    flan_t5 = re.search(r"(?i)\bflan[- ]?t5[- ]?(small|base|large|xl|xxl)\b", name)
+    if flan_t5:
+        size = flan_t5.group(1).lower()
+        millions, url = CHECKPOINT_SIZE_REFERENCES["flan_t5"][size]
+        return parameter_record(millions, "matched_public_checkpoint", url, f"google/flan-t5-{size}")
+
+    t5 = re.search(r"(?i)\bt5[- ]?(small|base|large)\b", name)
+    if t5:
+        size = t5.group(1).lower()
+        millions, url = CHECKPOINT_SIZE_REFERENCES["t5"][size]
+        return parameter_record(millions, "matched_public_checkpoint", url, f"google-t5/t5-{size}")
+
+    if re.search(r"(?i)\bgpt[- ]?2[- ]?xl\b", name):
+        return parameter_record(1500, "matched_public_checkpoint", "https://huggingface.co/openai-community/gpt2-xl", "gpt2-xl")
+    if re.search(r"(?i)\broberta[- ]?large\b", name):
+        return parameter_record(355, "matched_public_checkpoint", "https://huggingface.co/transformers/v4.12.0/pretrained_models.html", "roberta-large")
+    if re.search(r"(?i)\bflan[- ]?ul2\b", name):
+        return parameter_record(20000, "matched_public_checkpoint", "https://huggingface.co/google/flan-ul2", "google/flan-ul2")
+
+    return unknown_parameter_record()
 
 
 def task_taxonomy(task):
     """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
 
-    if "inference time" in text or text == "inference":
-        return {
-            "inputType": "Model input",
-            "outputType": "Scalar measurement",
-            "semanticOperation": "System efficiency",
-            "taskSubtype": "Inference latency",
-            "semanticScope": "System-level",
-        }
     if "audio question answering" in text:
         return {
             "inputType": "Audio + question",
@@ -571,6 +610,12 @@ def evidence_tier(number_of_conditions):
     return "Insufficient"
 
 
+def is_resource_outcome(row):
+    """Keep timing observations in the source workbook, outside performance analysis."""
+    metric = str(row.get("metric") or "").strip().casefold()
+    return metric.startswith("inference time") or metric.startswith("latency")
+
+
 def pick(record, *keys):
     return {key: record.get(source) for key, source in keys}
 
@@ -639,7 +684,11 @@ def build_bundle(workbook_path: Path):
         tests_by_trajectory.setdefault(trajectory_id, []).append(test)
 
     web_trajectories = []
+    resource_trajectories = []
     for row in trajectories:
+        if is_resource_outcome(row):
+            resource_trajectories.append(row)
+            continue
         trajectory_id = str(row.get("trajectory_id") or "")
         pattern = str(row.get("numerical_pattern") or "insufficient_points")
         taxonomy = task_taxonomy(row.get("task"))
@@ -678,6 +727,8 @@ def build_bundle(workbook_path: Path):
                 "modelParameterLabel": parameters["modelParameterLabel"],
                 "modelParameterGroup": parameters["modelParameterGroup"],
                 "modelParameterSource": parameters["modelParameterSource"],
+                "modelParameterSourceUrl": parameters["modelParameterSourceUrl"],
+                "modelParameterReferenceModel": parameters["modelParameterReferenceModel"],
                 "metric": row.get("metric"),
                 "metricGroup": metric_group(row.get("metric")),
                 "metricDirection": row.get("metric_direction"),
@@ -719,6 +770,8 @@ def build_bundle(workbook_path: Path):
             "paperCount": len(paper_ids),
             "trajectoryCount": len(web_trajectories),
             "resultCount": sum(len(row["results"]) for row in web_trajectories),
+            "resourceTrajectoriesOutsideAnalysis": len(resource_trajectories),
+            "resourcePapersOutsideAnalysis": len({row.get("paper_id") for row in resource_trajectories}),
             "verificationNotice": "All current trajectories require source-table verification before publication.",
             **progress,
         },

@@ -269,7 +269,11 @@ function TrajectoryDetail({
     <div className="inspector-content" key={trajectory.trajectoryId}>
       <div className="pattern-pill" style={{ "--pattern": patternColors[trajectory.category] } as React.CSSProperties}><span /> {trajectory.category}</div>
       <h2>{trajectory.modelName}</h2>
-      <p className="preview-context">{trajectory.modelFamily} · {trajectory.modelArchitecture} · {trajectory.modelParameterLabel ?? "parameters not reported"}<br />{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}</p>
+      <p className="preview-context">
+        {trajectory.modelFamily} · {trajectory.modelArchitecture} · {trajectory.modelParameterLabel ?? "parameter count unavailable"}
+        {trajectory.modelParameterSourceUrl ? <>{" · "}<a href={trajectory.modelParameterSourceUrl} target="_blank" rel="noopener noreferrer" title={`Reference checkpoint: ${trajectory.modelParameterReferenceModel}`}>checkpoint reference</a></> : null}
+        <br />{trajectory.task}<br />{trajectory.dataset} · {trajectory.metric}
+      </p>
       <TrajectoryChart trajectory={trajectory} />
 
       <div className="preview-details">
@@ -481,6 +485,8 @@ function ModelScaleAnalysis({
       parameters,
       knownTrajectories: knownParameters.length,
       knownPapers: new Set(knownParameters.map((trajectory) => trajectory.paperId)).size,
+      explicitTrajectories: knownParameters.filter((trajectory) => trajectory.modelParameterSource === "explicit_model_label").length,
+      matchedTrajectories: knownParameters.filter((trajectory) => trajectory.modelParameterSource === "matched_public_checkpoint").length,
     };
   }, [trajectories]);
 
@@ -495,19 +501,19 @@ function ModelScaleAnalysis({
           <span className="section-kicker">Model characteristics</span>
           <h2 id="model-scale-title">Architecture and parameter scale</h2>
         </div>
-        <p>Architecture is available for every trajectory. Parameter count is included only when the extracted model label states an explicit value.</p>
+        <p>Architecture is classified where disclosed or identifiable. Parameter counts come from explicit model labels or a matched public checkpoint; sources are linked in trajectory details.</p>
       </div>
 
       <div className="model-scale-coverage">
         <strong>{analysis.knownTrajectories} / {trajectories.length}</strong>
-        <span>trajectories with an explicit parameter count · {analysis.knownPapers} papers</span>
+        <span>{analysis.explicitTrajectories} explicit · {analysis.matchedTrajectories} checkpoint-matched · {analysis.knownPapers} papers</span>
       </div>
 
       <div className="model-scale-grid">
         <div className="model-scale-table-wrap">
           <h3>Architecture</h3>
           <table className="model-scale-table">
-            <thead><tr><th>Type</th><th>Papers</th><th>Traj.</th><th>Improved</th><th>Size reported</th></tr></thead>
+            <thead><tr><th>Type</th><th>Papers</th><th>Traj.</th><th>Improved</th><th>Size known</th></tr></thead>
             <tbody>{analysis.architectures.map((row) => (
               <tr key={row.name}>
                 <th scope="row"><button type="button" onClick={() => onInspect("Architecture", row.name)}>{row.name}</button></th>
@@ -518,7 +524,7 @@ function ModelScaleAnalysis({
         </div>
 
         <div className="model-scale-table-wrap">
-          <h3>Reported parameter count</h3>
+          <h3>Parameter count</h3>
           <table className="model-scale-table">
             <thead><tr><th>Range</th><th>Papers</th><th>Traj.</th><th>Improved</th></tr></thead>
             <tbody>{analysis.parameters.map((row) => (
@@ -530,7 +536,7 @@ function ModelScaleAnalysis({
           </table>
         </div>
       </div>
-      <p className="model-scale-note">Improved is the paper-weighted share of trajectories whose final tested shot condition exceeds their initial condition after metric-direction normalization. It is descriptive, not a significance test. Parameter ranges are not inferred for aliases or proprietary models.</p>
+      <p className="model-scale-note">Improved is the paper-weighted share of trajectories whose final tested shot condition exceeds their initial condition after metric-direction normalization. It is descriptive, not a significance test. Approximate counts (≈) match a named public checkpoint, not a count reported by the paper; ambiguous and undisclosed models remain unknown.</p>
     </section>
   );
 }
@@ -996,7 +1002,7 @@ function ScreeningPipeline() {
       </div>
 
       <p className="pipeline-status" aria-label="Current pipeline status">
-        <strong>{atlas.meta.candidatePaperCount}</strong> candidates; <strong>{atlas.meta.reviewedPaperCount}</strong> reviewed; <strong>{atlas.meta.paperCount}</strong> included; <strong>{atlas.meta.remainingPaperCount}</strong> not yet reviewed.
+        <strong>{atlas.meta.candidatePaperCount}</strong> candidates; <strong>{atlas.meta.reviewedPaperCount}</strong> reviewed; <strong>{atlas.meta.screeningStatusCounts.include}</strong> marked include; <strong>{atlas.meta.remainingPaperCount}</strong> not yet reviewed. {atlas.meta.paperCount} papers contribute performance trajectories.
       </p>
 
       <div className="pipeline-table-wrap">
@@ -1062,7 +1068,7 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
 
       <div className="coverage-status" aria-label="Paper screening status">
         <div><strong>{meta.reviewedPaperCount}</strong><span>reviewed of {meta.candidatePaperCount}</span></div>
-        <div><strong>{meta.paperCount}</strong><span>included with exact multi-shot results</span></div>
+        <div><strong>{meta.paperCount}</strong><span>papers with performance trajectories</span></div>
         <div><strong>{meta.remainingPaperCount}</strong><span>candidate papers remaining</span></div>
         <div><strong>{meta.screeningStatusCounts.uncertain}</strong><span>uncertain decisions for manual review</span></div>
       </div>
@@ -1481,10 +1487,11 @@ export default function Home() {
             <button className="modal-close" type="button" onClick={() => setShowDataNotes(false)} aria-label="Close data notes">×</button>
             <h2 id="data-modal-title">Data and methodology</h2>
             <p>The interface is generated from <strong>{atlas.meta.sourceFile}</strong>. A paper enters the dataset only when the source provides exact comparable results for at least two prompt demonstration counts.</p>
-            <div className="modal-stats"><div><strong>{atlas.meta.reviewedPaperCount}</strong><span>Reviewed papers</span></div><div><strong>{atlas.meta.paperCount}</strong><span>Included papers</span></div><div><strong>{atlas.meta.resultCount}</strong><span>Shot results</span></div></div>
+            <div className="modal-stats"><div><strong>{atlas.meta.reviewedPaperCount}</strong><span>Reviewed papers</span></div><div><strong>{atlas.meta.paperCount}</strong><span>Performance papers</span></div><div><strong>{atlas.meta.resultCount}</strong><span>Shot results</span></div></div>
             <dl className="method-list">
               <div><dt>Metric directionality</dt><dd>Lower-is-better metrics are reversed only for analysis; raw reported values remain visible.</dd></div>
               <div><dt>Evidence tier</dt><dd>Three or more points support a trajectory shape. Two points support direction only.</dd></div>
+              <div><dt>Analysis scope</dt><dd>Inference-time and latency results remain in the workbook but are excluded from task-performance summaries. Benchmark aggregates are identified as suite-level evidence.</dd></div>
               <div><dt>Statistical support</dt><dd>Numerical degradation is not treated as significant unless the source reports sufficient test output.</dd></div>
               <div><dt>Verification status</dt><dd>{atlas.meta.verificationNotice}</dd></div>
             </dl>

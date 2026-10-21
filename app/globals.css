@@ -267,6 +267,7 @@ a { color: inherit; }
 .pattern-pill > span { width: 7px; height: 7px; background: var(--pattern); }
 .trajectory-inspector h2 { font-size: clamp(25px,2vw,34px); }
 .preview-context { color: rgba(255,255,255,.56); font-size: 11px; line-height: 1.55; }
+.preview-context a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .no-selection { color: rgba(255,255,255,.55); margin-top: 40px; }
 
 .chart-block { margin-top: 22px; }

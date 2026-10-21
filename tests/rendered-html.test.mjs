@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 async function render() {
@@ -27,9 +28,21 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Where additional shots help/);
   assert.match(html, /paper-weighted improved endpoints/);
   assert.match(html, /Architecture and parameter scale/);
-  assert.match(html, /trajectories with an explicit parameter count/);
+  assert.match(html, /checkpoint-matched/);
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?4/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?5/);
+});
+
+test("derived evidence keeps checkpoint provenance and excludes timing outcomes", () => {
+  const atlas = JSON.parse(readFileSync(new URL("../app/data/atlas.json", import.meta.url), "utf8"));
+  assert.ok(atlas.meta.resourceTrajectoriesOutsideAnalysis > 0);
+  assert.ok(atlas.trajectories.every((row) => row.semanticOperation !== "System efficiency"));
+  assert.ok(atlas.trajectories.every((row) => !/^(inference time|latency)/i.test(row.metric ?? "")));
+  const matched = atlas.trajectories.filter((row) => row.modelParameterSource === "matched_public_checkpoint");
+  assert.ok(matched.length > 0);
+  assert.ok(matched.every((row) => row.modelParameterLabel.startsWith("≈") && row.modelParameterSourceUrl?.startsWith("https://")));
+  assert.ok(atlas.trajectories.filter((row) => row.modelParameterSource === "not_reported").every((row) => row.modelParameterMillions === null));
+  assert.ok(atlas.trajectories.filter((row) => row.semanticOperation === "Benchmark aggregate").every((row) => row.semanticScope === "Suite-level"));
 });

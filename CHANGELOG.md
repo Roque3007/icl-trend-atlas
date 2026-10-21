@@ -2,6 +2,18 @@
 
 ## 2026-10-21
 
+### Evidence scope and model-size provenance
+
+- Removed three inference-time trajectories from the site's performance
+  analysis because elapsed time is a resource outcome, not task accuracy;
+  the original workbook observations remain intact.
+- Added source-linked approximate parameter counts for unambiguous public
+  checkpoint names, keeping explicit counts, matched counts, and unknowns
+  separate. Marked closed-model architecture as unestablished when the name
+  alone does not determine it.
+- Labeled screening inclusion separately from papers represented by
+  performance trajectories, and incremented the taxonomy to version 5.
+
 ### Model architecture and parameter scale
 
 - Added architecture and parameter-count groupings to Source evidence.

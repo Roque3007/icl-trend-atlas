@@ -16,11 +16,16 @@ competing categories.
 - `modelFamily` is the canonical family used for aggregation, such as
   `OpenAI GPT`, `Meta Llama`, or `T5 / FLAN`.
 - `modelArchitecture` is an independent structural category, such as
-  `Decoder-only model` or `Encoder-decoder model`.
-- `modelParameterMillions` records a numeric parameter count only when the
-  extracted model label explicitly states one, such as `7B` or `600M`.
-- `modelParameterGroup` places explicit counts into fixed ranges for analysis.
-  Missing values remain `Not reported` rather than being inferred from aliases.
+  `Decoder-only model` or `Encoder-decoder model`. A product name alone does
+  not establish a structural architecture; unresolved cases are marked
+  `Architecture not established`.
+- `modelParameterMillions` records a numeric count either stated in the model
+  label (for example `7B`) or matched to an unambiguous public checkpoint name.
+- `modelParameterSource` separates `explicit_model_label` from
+  `matched_public_checkpoint`; a matched count is approximate and linked to
+  `modelParameterSourceUrl` and `modelParameterReferenceModel`.
+- `modelParameterGroup` places known counts into fixed ranges for analysis.
+  Ambiguous, proprietary, and composite model sizes remain `Not reported`.
 
 The raw fields remain available in every trajectory. A new family should be
 added only when the source data supports a stable, mutually exclusive mapping.
@@ -28,6 +33,10 @@ Composite systems are kept under `Composite pipeline` because assigning them
 to one component family would misrepresent the tested system. They do not
 receive a single parameter count because one component's size would not
 describe the complete pipeline.
+
+Checkpoint matching does not prove that the authors used an unchanged copy of
+the reference checkpoint. The approximate size describes the named backbone,
+not extra task-specific layers. Counts for closed models are not guessed.
 
 ## Task fields
 
@@ -44,6 +53,11 @@ both broad and specific questions.
 These dimensions are deliberately separate. For example, classification and
 question answering can both produce short labels or answers, but they perform
 different semantic operations.
+
+Timing outcomes (inference time and latency) remain in the source workbook
+but are excluded from the Atlas performance trajectories. They measure
+resource cost rather than task quality. Benchmark-wide averages remain marked
+`Suite-level` and should not be interpreted as evidence for an individual task.
 
 ## Cross-category evidence matrix
 
@@ -71,4 +85,6 @@ The importer writes `taxonomyVersion` to `atlas.json`. Increment this value
 whenever a grouping rule changes so exported analyses can identify which
 taxonomy produced their categories. Taxonomy version 3 introduced the model
 family/architecture separation and expanded task coverage. Version 4 added
-explicit-only parameter extraction and fixed parameter-scale ranges.
+explicit-only parameter extraction and fixed parameter-scale ranges. Version 5
+adds source-linked public checkpoint matching, marks unestablished architecture
+as such, and removes resource-cost curves from performance analyses.
