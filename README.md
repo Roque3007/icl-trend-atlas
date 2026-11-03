@@ -23,15 +23,15 @@ Pushing to `main` triggers `.github/workflows/pages.yml`, which publishes `pages
 
 ## Refresh the data
 
-The site reads `app/data/atlas.json`, which is generated from the master extraction workbook. After adding or correcting papers in the workbook, run:
+The site reads `app/data/atlas.json`, generated from `public/icl-master-extraction.xlsx`. This public workbook is a verified-only export; the larger staged workbook remains outside the repository. After promoting source-table-verified rows, rebuild the verified-only export from the research directory with `node work/master-workbook/build_master.mjs "$PWD" "$PWD/icl-trend-atlas/public/icl-master-extraction.xlsx" --verified-only`, then run:
 
 ```bash
 npm run data:import -- \
-  "/absolute/path/to/icl-master-extraction-monotonicity-analysis.xlsx" \
+  public/icl-master-extraction.xlsx \
   --output app/data/atlas.json
 ```
 
-The importer reads the `Trajectories`, `All Results`, and `Statistical Tests` sheets. It retains raw scores, direction-normalized analysis scores, source-table URLs, evidence tiers, and statistical-test records. Run `npm run build` after every refresh.
+The importer rejects any trajectory or result that is not marked `source_table_verified`. It retains raw scores, direction-normalized analysis scores, source-table URLs, evidence tiers, and statistical-test records. Run `npm run build:pages` and `npm test` after every refresh. A verified table score is descriptive evidence; it is not a statistically significant finding unless the paper reports a supporting test.
 
 Python needs `openpyxl`:
 
@@ -39,16 +39,19 @@ Python needs `openpyxl`:
 python3 -m pip install openpyxl
 ```
 
-To regenerate the manual-review queue from the workbook and the 355-paper
-candidate list, run:
+To regenerate a manual-review queue, supply the current *staged* workbook,
+not the verified-only public download, so provisional decisions are preserved:
 
 ```bash
-npm run data:review-queue
+npm run data:review-queue -- \
+  ../overnight_icl_2026-11-03/icl-master-extraction-expanded-2026-11-03.xlsx \
+  ../acl_multishot_high_precision.csv \
+  --output /path/outside-the-public-site/manual-review-queue.csv
 ```
 
 The queue preserves existing paper decisions. It prioritizes uncertain records
 by the evidence problem that requires review, followed by candidates that have
-not yet received a paper-level decision.
+not yet received a paper-level decision. Do not publish this provisional queue.
 
 ## Data interpretation
 

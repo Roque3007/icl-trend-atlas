@@ -13,7 +13,7 @@
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next",
     "data:import": "python3 scripts/import_workbook.py",
-    "data:review-queue": "python3 scripts/build_review_queue.py public/icl-master-extraction.xlsx ../acl_multishot_high_precision.csv --output public/manual-review-queue.csv",
+    "data:review-queue": "python3 scripts/build_review_queue.py",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

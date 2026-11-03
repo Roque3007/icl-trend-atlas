@@ -626,6 +626,18 @@ def build_bundle(workbook_path: Path):
     results = rows_for(workbook["All Results"])
     tests = rows_for(workbook["Statistical Tests"])
 
+    # The public Atlas must not expose provisional measurements. Fail closed
+    # when a staged workbook is supplied by mistake; the published download
+    # must match the evidence standard of the interactive data.
+    unverified = [row for row in trajectories if row.get("verification_status") != "source_table_verified"]
+    if unverified:
+        raise ValueError(f"Public import refused: {len(unverified)} trajectories are not source-table verified")
+    verified_ids = {str(row.get("trajectory_id") or "") for row in trajectories}
+    if any(row.get("verification_status") != "source_table_verified" or str(row.get("trajectory_id") or "") not in verified_ids for row in results):
+        raise ValueError("Public import refused: result rows are unverified or lack a verified trajectory")
+    if any(str(row.get("trajectory_id") or "") not in verified_ids for row in tests):
+        raise ValueError("Public import refused: statistical tests lack a verified trajectory")
+
     results_by_trajectory = {}
     for row in results:
         trajectory_id = str(row.get("trajectory_id") or "")
@@ -772,7 +784,7 @@ def build_bundle(workbook_path: Path):
             "resultCount": sum(len(row["results"]) for row in web_trajectories),
             "resourceTrajectoriesOutsideAnalysis": len(resource_trajectories),
             "resourcePapersOutsideAnalysis": len({row.get("paper_id") for row in resource_trajectories}),
-            "verificationNotice": "All current trajectories require source-table verification before publication.",
+            "verificationNotice": "All published trajectories were checked against the cited source table; this does not establish complete paper coverage or statistical significance.",
             **progress,
         },
         "trajectories": web_trajectories,

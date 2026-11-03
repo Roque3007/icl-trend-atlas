@@ -1491,13 +1491,12 @@ export default function Home() {
             <dl className="method-list">
               <div><dt>Metric directionality</dt><dd>Lower-is-better metrics are reversed only for analysis; raw reported values remain visible.</dd></div>
               <div><dt>Evidence tier</dt><dd>Three or more points support a trajectory shape. Two points support direction only.</dd></div>
-              <div><dt>Analysis scope</dt><dd>Inference-time and latency results remain in the workbook but are excluded from task-performance summaries. Benchmark aggregates are identified as suite-level evidence.</dd></div>
+              <div><dt>Analysis scope</dt><dd>Inference-time and latency results are excluded from task-performance summaries. Benchmark aggregates are identified as suite-level evidence.</dd></div>
               <div><dt>Statistical support</dt><dd>Numerical degradation is not treated as significant unless the source reports sufficient test output.</dd></div>
               <div><dt>Verification status</dt><dd>{atlas.meta.verificationNotice}</dd></div>
             </dl>
             <div className="modal-actions">
-              <a className="modal-download" href="./icl-master-extraction.xlsx" download>Download the master extraction workbook (.xlsx)</a>
-              <a className="modal-download" href="./manual-review-queue.csv" download>Download the manual-review queue (.csv)</a>
+              <a className="modal-download" href="./icl-master-extraction.xlsx" download>Download the source-verified dataset (.xlsx)</a>
               <button className="modal-done" type="button" onClick={() => setShowDataNotes(false)}>Close</button>
             </div>
           </section>

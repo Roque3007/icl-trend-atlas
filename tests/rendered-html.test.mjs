@@ -35,13 +35,16 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /taxonomy v(?:<!-- -->)?5/);
 });
 
-test("derived evidence keeps checkpoint provenance and excludes timing outcomes", () => {
+test("published evidence is source-verified and excludes timing outcomes", () => {
   const atlas = JSON.parse(readFileSync(new URL("../app/data/atlas.json", import.meta.url), "utf8"));
-  assert.ok(atlas.meta.resourceTrajectoriesOutsideAnalysis > 0);
+  // A verified-only export can contain no verified timing observations. The
+  // invariant is that any such observations never enter performance analysis.
+  assert.ok(atlas.trajectories.length > 0);
+  assert.ok(atlas.trajectories.every((row) => row.verificationStatus === "source_table_verified"));
+  assert.ok(atlas.trajectories.every((row) => row.resultTableLink?.startsWith("https://")));
   assert.ok(atlas.trajectories.every((row) => row.semanticOperation !== "System efficiency"));
   assert.ok(atlas.trajectories.every((row) => !/^(inference time|latency)/i.test(row.metric ?? "")));
   const matched = atlas.trajectories.filter((row) => row.modelParameterSource === "matched_public_checkpoint");
-  assert.ok(matched.length > 0);
   assert.ok(matched.every((row) => row.modelParameterLabel.startsWith("≈") && row.modelParameterSourceUrl?.startsWith("https://")));
   assert.ok(atlas.trajectories.filter((row) => row.modelParameterSource === "not_reported").every((row) => row.modelParameterMillions === null));
   assert.ok(atlas.trajectories.filter((row) => row.semanticOperation === "Benchmark aggregate").every((row) => row.semanticScope === "Suite-level"));
