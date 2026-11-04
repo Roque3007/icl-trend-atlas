@@ -11,6 +11,35 @@ type MatrixRowMode = "I/O pair" | "Operation";
 type WorkspaceView = "comparison" | "evidence" | "pipeline";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
+type OverviewFilters = {
+  input: string;
+  output: string;
+  operation: string;
+  family: string;
+  architecture: string;
+  parameters: string;
+  scope: string;
+  metric: string;
+  pattern: string;
+};
+
+// Keep overview filters on the imported taxonomy fields so plot and evidence labels cannot drift apart.
+const overviewDimensions: { key: keyof OverviewFilters; label: string; all: string; value: (row: Trajectory) => string }[] = [
+  { key: "input", label: "Input", all: "All inputs", value: (row) => row.inputType },
+  { key: "output", label: "Output", all: "All outputs", value: (row) => row.outputType },
+  { key: "operation", label: "Operation", all: "All operations", value: (row) => row.semanticOperation },
+  { key: "family", label: "Model family", all: "All model families", value: (row) => row.modelFamily },
+  { key: "architecture", label: "Architecture", all: "All architectures", value: (row) => row.modelArchitecture },
+  { key: "parameters", label: "Parameter scale", all: "All parameter scales", value: (row) => row.modelParameterGroup },
+  { key: "scope", label: "Scope", all: "All scopes", value: (row) => row.semanticScope },
+  { key: "metric", label: "Metric", all: "All metrics", value: (row) => row.metricGroup },
+  { key: "pattern", label: "Pattern", all: "All patterns", value: (row) => row.category },
+];
+
+const emptyOverviewFilters = Object.fromEntries(overviewDimensions.map(({ key, all }) => [key, all])) as OverviewFilters;
+const overviewOptions = Object.fromEntries(overviewDimensions.map(({ key, value }) => [
+  key, [...new Set(atlas.trajectories.map(value))].filter(Boolean).sort((a, b) => a.localeCompare(b)),
+])) as Record<keyof OverviewFilters, string[]>;
 
 const lenses: Lens[] = ["I/O", "Task", "Model family", "Architecture", "Parameters", "Metric", "Scope", "Pattern"];
 
@@ -545,29 +574,28 @@ function TrajectoryField({
   trajectories,
   selectedTrajectoryId,
   onSelect,
+  filters,
+  onFilterChange,
+  onClearFilters,
   embedded = false,
 }: {
   trajectories: Trajectory[];
   selectedTrajectoryId: string;
   onSelect: (trajectory: Trajectory) => void;
+  filters: OverviewFilters;
+  onFilterChange: (key: keyof OverviewFilters, value: string) => void;
+  onClearFilters: () => void;
   embedded?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [colorMode, setColorMode] = useState<FieldColorMode>("Pattern");
   const [xMode, setXMode] = useState<FieldXMode>("progress");
-  const [inputFilter, setInputFilter] = useState("All inputs");
-  const [outputFilter, setOutputFilter] = useState("All outputs");
   const [showMedian, setShowMedian] = useState(true);
   const [hoveredId, setHoveredId] = useState("");
   const [tooltip, setTooltip] = useState<{ x: number; y: number; trajectory: Trajectory; score: number; shot: number } | null>(null);
 
-  const inputTypes = useMemo(() => [...new Set(trajectories.map((item) => item.inputType))].sort(), [trajectories]);
-  const outputTypes = useMemo(() => [...new Set(trajectories.map((item) => item.outputType))].sort(), [trajectories]);
-
   const prepared = useMemo(() => trajectories
-    .filter((trajectory) => inputFilter === "All inputs" || trajectory.inputType === inputFilter)
-    .filter((trajectory) => outputFilter === "All outputs" || trajectory.outputType === outputFilter)
     .map((trajectory) => {
       const rawPoints = trajectory.results
         .map((point) => typeof point.shotCount === "number" && typeof point.analysisScore === "number"
@@ -591,7 +619,7 @@ function TrajectoryField({
         })),
       };
     })
-    .filter((item): item is NonNullable<typeof item> => item !== null), [inputFilter, outputFilter, trajectories]);
+    .filter((item): item is NonNullable<typeof item> => item !== null), [trajectories]);
 
   const medianSeries = useMemo(() => {
     const interpolate = (points: (typeof prepared)[number]["points"], progress: number) => {
@@ -788,6 +816,7 @@ function TrajectoryField({
 
   const paperCount = new Set(prepared.map((item) => item.trajectory.paperId)).size;
   const routeCount = new Set(prepared.map((item) => item.trajectory.ioFamily)).size;
+  const activeFilterCount = overviewDimensions.filter(({ key, all }) => filters[key] !== all).length;
 
   return (
     <section className={`trajectory-field inview ${embedded ? "embedded-field" : ""}`} aria-labelledby="trajectory-field-title">
@@ -804,9 +833,24 @@ function TrajectoryField({
         </div>
       </div>
 
+      <details className="field-filter-panel">
+        <summary>Filter trajectories{activeFilterCount > 0 ? ` · ${activeFilterCount} active` : ""}</summary>
+        <div className="field-filter-body">
+          <button type="button" onClick={onClearFilters} disabled={activeFilterCount === 0}>Clear filters</button>
+          <div className="field-filters">
+            {overviewDimensions.map(({ key, label, all }) => (
+              <label key={key}>
+                <span>{label}</span>
+                <select value={filters[key]} onChange={(event) => onFilterChange(key, event.target.value)}>
+                  <option>{all}</option>
+                  {overviewOptions[key].map((value) => <option key={value}>{value}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        </div>
+      </details>
       <div className="field-controls">
-        <label><span>Input</span><select value={inputFilter} onChange={(event) => setInputFilter(event.target.value)}><option>All inputs</option>{inputTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label><span>Output</span><select value={outputFilter} onChange={(event) => setOutputFilter(event.target.value)}><option>All outputs</option>{outputTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
         <label><span>Color</span><select value={colorMode} onChange={(event) => setColorMode(event.target.value as FieldColorMode)}><option>Pattern</option><option>I/O family</option><option>Operation</option><option>Scope</option></select></label>
         <div className="field-segment" role="group" aria-label="Horizontal axis">
           <span>X-axis</span>
@@ -820,9 +864,9 @@ function TrajectoryField({
       <div
         className="field-canvas"
         ref={containerRef}
-        role="button"
-        tabIndex={0}
-        aria-label="Interactive trajectory field. Select a highlighted trajectory to inspect it."
+        role={prepared.length > 0 ? "button" : undefined}
+        tabIndex={prepared.length > 0 ? 0 : -1}
+        aria-label={prepared.length > 0 ? "Interactive trajectory field. Select a highlighted trajectory to inspect it." : undefined}
         onPointerMove={handlePointerMove}
         onPointerLeave={() => { setHoveredId(""); setTooltip(null); }}
         onClick={() => { const selected = prepared.find((item) => item.trajectory.trajectoryId === hoveredId); if (selected) onSelect(selected.trajectory); }}
@@ -833,9 +877,13 @@ function TrajectoryField({
           if (selected) onSelect(selected.trajectory);
         }}
       >
-        <canvas ref={canvasRef} aria-label={`Normalized shapes for ${prepared.length} experimental trajectories`} />
-        <div className="field-y-label" aria-hidden="true">Normalized shape</div>
-        <div className="field-x-label" aria-hidden="true">{xMode === "progress" ? "Relative shot progression" : xMode === "logShots" ? "Reported shot count · log(1 + shots)" : "Reported shot count"}</div>
+        {prepared.length > 0 ? (
+          <>
+            <canvas ref={canvasRef} aria-label={`Normalized shapes for ${prepared.length} experimental trajectories`} />
+            <div className="field-y-label" aria-hidden="true">Normalized shape</div>
+            <div className="field-x-label" aria-hidden="true">{xMode === "progress" ? "Relative shot progression" : xMode === "logShots" ? "Reported shot count · log(1 + shots)" : "Reported shot count"}</div>
+          </>
+        ) : <div className="field-empty"><strong>No trajectories match these filters.</strong><button type="button" onClick={onClearFilters}>Clear filters</button></div>}
         {tooltip ? (
           <div className="field-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
             <span>{tooltip.trajectory.taskSubtype} · {tooltip.shot} shots</span>
@@ -1096,6 +1144,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [patternFilter, setPatternFilter] = useState("All patterns");
   const [evidenceFilter, setEvidenceFilter] = useState("All evidence");
+  const [overviewFilters, setOverviewFilters] = useState<OverviewFilters>(emptyOverviewFilters);
   const [expandedPaper, setExpandedPaper] = useState("");
   const [selectedTrajectoryId, setSelectedTrajectoryId] = useState("");
   const [showDataNotes, setShowDataNotes] = useState(false);
@@ -1159,7 +1208,11 @@ export default function Home() {
   }, [filtered]);
 
   const selectedTrajectory = filtered.find((item) => item.trajectoryId === selectedTrajectoryId) ?? filtered[0];
-  const comparisonTrajectory = atlas.trajectories.find((item) => item.trajectoryId === selectedTrajectoryId) ?? atlas.trajectories[0];
+  // Apply one subset to both the field and inspector; a filtered-out selection must not remain on screen.
+  const overviewTrajectories = useMemo(() => atlas.trajectories.filter((trajectory) =>
+    overviewDimensions.every(({ key, all, value }) => overviewFilters[key] === all || value(trajectory) === overviewFilters[key]),
+  ), [overviewFilters]);
+  const comparisonTrajectory = overviewTrajectories.find((item) => item.trajectoryId === selectedTrajectoryId) ?? overviewTrajectories[0];
   const effectiveExpandedPaper = paperGroups.some((paper) => paper.paperId === expandedPaper)
     ? expandedPaper
     : paperGroups[0]?.paperId ?? "";
@@ -1319,9 +1372,12 @@ export default function Home() {
           <section className="workspace-panel comparison-panel" id="comparison-panel" role="tabpanel" aria-labelledby="comparison-tab">
             <div className="comparison-layout">
               <TrajectoryField
-                trajectories={atlas.trajectories}
-                selectedTrajectoryId={selectedTrajectoryId}
+                trajectories={overviewTrajectories}
+                selectedTrajectoryId={comparisonTrajectory?.trajectoryId ?? ""}
                 onSelect={selectFromField}
+                filters={overviewFilters}
+                onFilterChange={(key, value) => setOverviewFilters((current) => ({ ...current, [key]: value }))}
+                onClearFilters={() => setOverviewFilters(emptyOverviewFilters)}
                 embedded
               />
               <aside className="trajectory-inspector comparison-inspector" aria-live="polite">

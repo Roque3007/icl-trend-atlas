@@ -18,6 +18,8 @@
 ## 3. Exact triggers
 
 - **Tab selection:** changes the active research view immediately and preserves the selected trajectory.
+- **Overview filter disclosure and change:** native disclosure reveals the controls without motion. Changing a filter recomputes the plotted trajectories, counts, legend, median, and selected-experiment panel immediately. An empty result shows a clear message; no stale selection remains visible.
+- **Clear filters:** restores the full overview without scrolling or animated rearrangement.
 - **Group, paper, or trajectory selection:** updates the associated evidence without spatial movement.
 - **Chart pointer or keyboard focus:** shows the exact point value without scaling or animating the point.
 - **Methods file disclosure:** opens a native `details` element containing the implementation filenames for that stage.

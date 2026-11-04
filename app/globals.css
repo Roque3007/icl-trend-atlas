@@ -89,12 +89,21 @@ a { color: inherit; }
 .field-summary div:last-child { border-right: 0; }
 .field-summary strong { display: block; font-size: 25px; letter-spacing: -.04em; }
 .field-summary span { display: block; margin-top: 3px; color: rgba(255,255,255,.43); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; }
-.field-controls { display: grid; grid-template-columns: repeat(3,minmax(140px,1fr)) auto auto; gap: 8px; margin: 26px 0 12px; align-items: end; }
-.field-controls label, .field-segment { display: grid; gap: 6px; }
-.field-controls label > span, .field-segment > span { color: rgba(255,255,255,.46); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.field-controls select { width: 100%; min-height: 42px; border: 1px solid rgba(255,255,255,.14); padding: 0 11px; background: rgba(255,255,255,.07); color: white; font-size: 13px; outline: none; }
-.field-controls select:focus { border-color: var(--lime); background: rgba(255,255,255,.1); }
-.field-controls select option { color: var(--ink); background: white; }
+.field-filter-panel { margin-top: 22px; border-top: 1px solid rgba(255,255,255,.16); }
+.field-filter-panel summary { padding: 13px 0; color: var(--lime); font-size: 12px; font-weight: 700; cursor: pointer; }
+.field-filter-panel summary:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.field-filter-body { padding-bottom: 10px; }
+.field-filter-body > button { display: block; margin: 0 0 8px auto; border: 0; padding: 2px 0; background: none; color: var(--lime); font-size: 11px; font-weight: 700; cursor: pointer; }
+.field-filter-body > button:disabled { color: rgba(255,255,255,.35); cursor: default; }
+.field-filters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.field-controls { display: grid; grid-template-columns: minmax(140px,1fr) auto auto; gap: 8px; margin: 16px 0 12px; align-items: end; }
+.field-filters label, .field-controls label, .field-segment { display: grid; gap: 6px; min-width: 0; }
+.field-filters label > span, .field-controls label > span, .field-segment > span { color: rgba(255,255,255,.46); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.field-filters select, .field-controls select { width: 100%; min-height: 42px; border: 1px solid rgba(255,255,255,.14); padding: 0 11px; background: rgba(255,255,255,.07); color: white; font-size: 13px; outline: none; }
+.field-filters select:focus, .field-controls select:focus { border-color: var(--lime); background: rgba(255,255,255,.1); }
+.field-filters select option, .field-controls select option { color: var(--ink); background: white; }
+.field-empty { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center; color: rgba(255,255,255,.75); }
+.field-empty button { border: 1px solid var(--lime); background: transparent; color: var(--lime); padding: 9px 14px; cursor: pointer; }
 .field-segment { grid-template-columns: repeat(3,auto); }
 .field-segment > span { grid-column: 1 / -1; }
 .field-segment button, .median-toggle { min-height: 42px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: rgba(255,255,255,.65); padding: 0 12px; cursor: pointer; font-size: 12px; font-weight: 750; }
@@ -345,6 +354,7 @@ a { color: inherit; }
   .field-heading { grid-template-columns: 1fr; }
   .field-summary { width: max-content; max-width: 100%; }
   .field-controls { grid-template-columns: repeat(3,1fr); }
+  .field-filters { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .field-segment, .median-toggle { align-self: stretch; }
   .coverage-heading { grid-template-columns: 1fr; }
   .coverage-body { grid-template-columns: 1fr; }
@@ -372,9 +382,8 @@ a { color: inherit; }
   .field-summary { width: 100%; }
   .field-summary div { min-width: 0; padding: 12px 9px; }
   .field-controls { grid-template-columns: 1fr 1fr; }
-  .field-controls label:first-child { grid-column: 1; }
-  .field-controls label:nth-child(2) { grid-column: 2; }
-  .field-controls label:nth-child(3) { grid-column: 1 / -1; }
+  .field-filters { grid-template-columns: 1fr 1fr; }
+  .field-controls label:first-child { grid-column: 1 / -1; }
   .field-canvas { height: 430px; }
   .evidence-matrix { padding: 20px 13px; }
   .matrix-heading { grid-template-columns: 1fr; }
@@ -412,7 +421,8 @@ a { color: inherit; }
   .field-summary strong { font-size: 20px; }
   .field-summary span { font-size: 8px; }
   .field-controls { grid-template-columns: 1fr; }
-  .field-controls label:first-child, .field-controls label:nth-child(2), .field-controls label:nth-child(3) { grid-column: auto; }
+  .field-filters { grid-template-columns: 1fr; }
+  .field-controls label:first-child { grid-column: auto; }
   .field-canvas { height: 390px; }
   .field-legend { max-height: 120px; overflow-y: auto; }
   .coverage-status { grid-template-columns: 1fr; }
