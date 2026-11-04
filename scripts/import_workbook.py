@@ -87,14 +87,20 @@ def pipeline_counts(workbook_path: Path):
 
     candidates = csv_rows(research_dir / "acl_multishot_high_precision.csv")
     reviewed = {}
-    review_files = sorted(research_dir.glob("batch_processor_output/batch_*/batch_paper_review.csv"))
-    review_files += sorted(research_dir.glob("compact_processor_output/batch_*/batch_paper_review.csv"))
-    review_files += sorted(research_dir.glob("coverage_processor_output/batch_*/batch_paper_review.csv"))
-    for review_file in review_files:
-        for row in csv_rows(review_file):
-            paper_id = row.get("paper_id")
-            if paper_id and row.get("status") in {"include", "exclude", "uncertain"}:
-                reviewed[paper_id] = row
+    # Mirror the master builder's precedence: source-checked manual rescue
+    # first, followed by the original processor outputs. The first decision
+    # for an ID wins, so a later uncertain batch cannot undo a verified one.
+    batch_roots = ("manual_processor_output", "batch_processor_output",
+                   "compact_processor_output", "coverage_processor_output")
+    for batch_root in batch_roots:
+        for summary_path in sorted((research_dir / batch_root).glob("batch_*/batch_summary.json")):
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            headers = summary.get("review_headers", [])
+            for values in summary.get("review_rows", []):
+                row = dict(zip(headers, values))
+                paper_id = row.get("paper_id")
+                if paper_id and paper_id not in reviewed and row.get("status") in {"include", "exclude", "uncertain"}:
+                    reviewed[paper_id] = row
 
     compact_manifest = csv_rows(research_dir / "local_pipeline_output/compact_review_5000/compact_manifest.csv")
     ready_queue_count = sum(row.get("anthology_id") not in reviewed for row in compact_manifest)

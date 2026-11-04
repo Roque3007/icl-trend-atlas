@@ -37,6 +37,8 @@ test("server-renders the ICL Atlas application shell", async () => {
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
   const atlas = JSON.parse(readFileSync(new URL("../app/data/atlas.json", import.meta.url), "utf8"));
+  assert.equal(atlas.meta.reviewedPaperCount, 231);
+  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 85, exclude: 79, uncertain: 67 });
   // A verified-only export can contain no verified timing observations. The
   // invariant is that any such observations never enter performance analysis.
   assert.ok(atlas.trajectories.length > 0);
