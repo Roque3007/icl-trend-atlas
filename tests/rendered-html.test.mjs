@@ -32,7 +32,7 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?5/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?6/);
 });
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
@@ -48,4 +48,6 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.ok(matched.every((row) => row.modelParameterLabel.startsWith("≈") && row.modelParameterSourceUrl?.startsWith("https://")));
   assert.ok(atlas.trajectories.filter((row) => row.modelParameterSource === "not_reported").every((row) => row.modelParameterMillions === null));
   assert.ok(atlas.trajectories.filter((row) => row.semanticOperation === "Benchmark aggregate").every((row) => row.semanticScope === "Suite-level"));
+  assert.ok(atlas.trajectories.filter((row) => row.task === "Aspect sentiment quad prediction").every((row) => row.semanticOperation === "Structured extraction"));
+  assert.ok(atlas.trajectories.filter((row) => row.task === "Lexical simplification").every((row) => row.semanticOperation === "Rewriting / transformation"));
 });

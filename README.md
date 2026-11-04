@@ -44,7 +44,7 @@ not the verified-only public download, so provisional decisions are preserved:
 
 ```bash
 npm run data:review-queue -- \
-  ../overnight_icl_2026-11-03/icl-master-extraction-expanded-2026-11-03-v2.xlsx \
+  ../overnight_icl_2026-11-04/icl-master-extraction-expanded-2026-11-04.xlsx \
   ../acl_multishot_high_precision.csv \
   --output /path/outside-the-public-site/manual-review-queue.csv
 ```

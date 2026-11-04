@@ -88,3 +88,7 @@ family/architecture separation and expanded task coverage. Version 4 added
 explicit-only parameter extraction and fixed parameter-scale ranges. Version 5
 adds source-linked public checkpoint matching, marks unestablished architecture
 as such, and removes resource-cost curves from performance analyses.
+Version 6 distinguishes aspect-sentiment tuple extraction from sentiment
+classification, maps lexical simplification to word-level rewriting, and
+recognizes hyperpartisan news detection as classification. These rules follow
+the output structure stated by the newly source-verified papers.

@@ -28,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 5
+TAXONOMY_VERSION = 6
 
 
 # These mappings are limited to unambiguous public checkpoint names. The URLs
@@ -113,6 +113,10 @@ def pipeline_counts(workbook_path: Path):
 
 def metric_group(metric):
     text = str(metric or "").lower()
+    if text == "pot":
+        return "Lexical simplification quality"
+    if text == "acc":
+        return "Accuracy"
     if "cat attentiveness" in text:
         return "Attentiveness"
     if "accuracy" in text or text.startswith("acc@"):
@@ -315,6 +319,30 @@ def reported_model_parameters(model_name, model_family):
 def task_taxonomy(task):
     """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
+
+    # ASQP emits a tuple of aspect/opinion spans, category and polarity. It is
+    # structured extraction, not a single-label sentiment classification.
+    if "aspect sentiment quad prediction" in text:
+        return {
+            "inputType": "Text", "outputType": "Structured record(s)",
+            "semanticOperation": "Structured extraction",
+            "taskSubtype": "Aspect sentiment quad prediction",
+            "semanticScope": "Local / span",
+        }
+    if "lexical simplification" in text:
+        return {
+            "inputType": "Word + context", "outputType": "Simpler word",
+            "semanticOperation": "Rewriting / transformation",
+            "taskSubtype": "Lexical simplification",
+            "semanticScope": "Local / span",
+        }
+    if "hyperpartisan news detection" in text:
+        return {
+            "inputType": "News text", "outputType": "Label",
+            "semanticOperation": "Classification",
+            "taskSubtype": "Hyperpartisan news detection",
+            "semanticScope": "Instance-level",
+        }
 
     if "audio question answering" in text:
         return {
