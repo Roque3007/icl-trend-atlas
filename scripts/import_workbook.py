@@ -28,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 7
+TAXONOMY_VERSION = 8
 
 
 # These mappings are limited to unambiguous public checkpoint names. The URLs
@@ -316,9 +316,20 @@ def reported_model_parameters(model_name, model_family):
     return unknown_parameter_record()
 
 
-def task_taxonomy(task):
+def task_taxonomy(task, dataset=""):
     """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
+
+    # iNews keeps image and text inputs as separate experimental conditions.
+    # Both predict an ordinal arousal rating rather than a class label or text.
+    if "personalized affective arousal prediction" in text:
+        modality = "Image" if "image input" in str(dataset).lower() else "Text"
+        return {
+            "inputType": modality, "outputType": "Ordinal rating",
+            "semanticOperation": "Rating prediction",
+            "taskSubtype": "Personalized arousal prediction",
+            "semanticScope": "Instance-level",
+        }
 
     # CODE4STRUCT predicts argument spans and their roles for a given event;
     # the output is structured extraction, not generic text generation.
@@ -741,7 +752,7 @@ def build_bundle(workbook_path: Path):
             continue
         trajectory_id = str(row.get("trajectory_id") or "")
         pattern = str(row.get("numerical_pattern") or "insufficient_points")
-        taxonomy = task_taxonomy(row.get("task"))
+        taxonomy = task_taxonomy(row.get("task"), row.get("dataset"))
         model = model_taxonomy(row.get("model_name"), row.get("model_type"))
         parameters = reported_model_parameters(row.get("model_name"), model["modelFamily"])
         normalized_change = row.get("normalized_endpoint_change")

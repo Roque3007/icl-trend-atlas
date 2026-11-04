@@ -94,3 +94,6 @@ recognizes hyperpartisan news detection as classification. These rules follow
 the output structure stated by the newly source-verified papers.
 Version 7 maps event argument extraction to structured extraction: the output
 contains argument spans and role labels, not unconstrained text.
+Version 8 separates image-input and text-input arousal-rating prediction in
+iNews. Both produce an ordinal rating; input modality comes from the fixed
+dataset condition, not from the task name alone.

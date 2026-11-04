@@ -32,7 +32,7 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?7/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?8/);
 });
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
@@ -59,4 +59,10 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.equal(indicTranslation.length, 4);
   assert.ok(indicTranslation.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,3,5,10"));
   assert.ok(indicTranslation.every((row) => row.resultTableLink.endsWith("2024.wmt-1.71.pdf#page=4")));
+  const affect = atlas.trajectories.filter((row) => row.paperId === "2025.acl-long.1217");
+  assert.equal(affect.length, 12);
+  assert.ok(affect.every((row) => row.semanticOperation === "Rating prediction"));
+  assert.equal(new Set(affect.map((row) => row.inputType)).size, 2);
+  assert.ok(affect.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,4,8,16,32"));
+  assert.ok(affect.filter((row) => row.metric === "MAE").every((row) => row.metricDirection === "lower_is_better"));
 });
