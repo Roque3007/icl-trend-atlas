@@ -55,4 +55,8 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.ok(eventArguments.every((row) => row.semanticOperation === "Structured extraction"));
   assert.ok(eventArguments.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,1,10"));
   assert.ok(eventArguments.every((row) => row.statisticalTests.length === 0));
+  const indicTranslation = atlas.trajectories.filter((row) => row.paperId === "2024.wmt-1.71");
+  assert.equal(indicTranslation.length, 4);
+  assert.ok(indicTranslation.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,3,5,10"));
+  assert.ok(indicTranslation.every((row) => row.resultTableLink.endsWith("2024.wmt-1.71.pdf#page=4")));
 });
