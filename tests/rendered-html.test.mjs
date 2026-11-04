@@ -32,7 +32,7 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?6/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?7/);
 });
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
@@ -50,4 +50,9 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.ok(atlas.trajectories.filter((row) => row.semanticOperation === "Benchmark aggregate").every((row) => row.semanticScope === "Suite-level"));
   assert.ok(atlas.trajectories.filter((row) => row.task === "Aspect sentiment quad prediction").every((row) => row.semanticOperation === "Structured extraction"));
   assert.ok(atlas.trajectories.filter((row) => row.task === "Lexical simplification").every((row) => row.semanticOperation === "Rewriting / transformation"));
+  const eventArguments = atlas.trajectories.filter((row) => row.paperId === "2023.acl-long.202");
+  assert.equal(eventArguments.length, 6);
+  assert.ok(eventArguments.every((row) => row.semanticOperation === "Structured extraction"));
+  assert.ok(eventArguments.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,1,10"));
+  assert.ok(eventArguments.every((row) => row.statisticalTests.length === 0));
 });

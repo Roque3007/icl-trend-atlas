@@ -92,3 +92,5 @@ Version 6 distinguishes aspect-sentiment tuple extraction from sentiment
 classification, maps lexical simplification to word-level rewriting, and
 recognizes hyperpartisan news detection as classification. These rules follow
 the output structure stated by the newly source-verified papers.
+Version 7 maps event argument extraction to structured extraction: the output
+contains argument spans and role labels, not unconstrained text.

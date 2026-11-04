@@ -28,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 6
+TAXONOMY_VERSION = 7
 
 
 # These mappings are limited to unambiguous public checkpoint names. The URLs
@@ -319,6 +319,16 @@ def reported_model_parameters(model_name, model_family):
 def task_taxonomy(task):
     """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
+
+    # CODE4STRUCT predicts argument spans and their roles for a given event;
+    # the output is structured extraction, not generic text generation.
+    if "event argument extraction" in text:
+        return {
+            "inputType": "Text + event trigger", "outputType": "Argument span(s) + role(s)",
+            "semanticOperation": "Structured extraction",
+            "taskSubtype": "Event argument extraction",
+            "semanticScope": "Local / span",
+        }
 
     # ASQP emits a tuple of aspect/opinion spans, category and polarity. It is
     # structured extraction, not a single-label sentiment classification.
