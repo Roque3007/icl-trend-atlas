@@ -38,13 +38,13 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?8/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?9/);
 });
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
   const atlas = JSON.parse(readFileSync(new URL("../app/data/atlas.json", import.meta.url), "utf8"));
   assert.equal(atlas.meta.reviewedPaperCount, 231);
-  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 85, exclude: 79, uncertain: 67 });
+  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 86, exclude: 79, uncertain: 66 });
   // A verified-only export can contain no verified timing observations. The
   // invariant is that any such observations never enter performance analysis.
   assert.ok(atlas.trajectories.length > 0);
@@ -73,4 +73,10 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.equal(new Set(affect.map((row) => row.inputType)).size, 2);
   assert.ok(affect.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,4,8,16,32"));
   assert.ok(affect.filter((row) => row.metric === "MAE").every((row) => row.metricDirection === "lower_is_better"));
+  const iwslt = atlas.trajectories.filter((row) => row.paperId === "2025.iwslt-1.11");
+  assert.equal(iwslt.length, 6);
+  assert.ok(iwslt.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,5,10,20"));
+  assert.ok(iwslt.every((row) => row.statisticalTests.length === 0));
+  assert.ok(iwslt.every((row) => row.resultTableLink.endsWith("2025.iwslt-1.11.pdf#page=16")));
+  assert.ok(iwslt.filter((row) => row.metric === "BLEU").every((row) => row.metricGroup === "Machine translation quality"));
 });

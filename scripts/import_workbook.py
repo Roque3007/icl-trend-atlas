@@ -28,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 8
+TAXONOMY_VERSION = 9
 
 
 # These mappings are limited to unambiguous public checkpoint names. The URLs
@@ -129,7 +129,9 @@ def metric_group(metric):
         return "Accuracy"
     if "entity-level f1" in text or text == "f1":
         return "F1"
-    if any(token in text for token in ("spbleu", "chrf", "comet", "bleurt")):
+    # Plain BLEU is the same translation-metric family as spBLEU; otherwise
+    # newly verified BLEU rows fall into the non-informative "Other" bucket.
+    if any(token in text for token in ("bleu", "chrf", "comet")):
         return "Machine translation quality"
     if "rouge" in text or "bertscore" in text:
         return "Text generation similarity"

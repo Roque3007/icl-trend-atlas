@@ -97,3 +97,6 @@ contains argument spans and role labels, not unconstrained text.
 Version 8 separates image-input and text-input arousal-rating prediction in
 iNews. Both produce an ordinal rating; input modality comes from the fixed
 dataset condition, not from the task name alone.
+Version 9 groups plain BLEU with other machine-translation quality metrics,
+including spBLEU. It previously fell into `Other` despite measuring the same
+reported translation-quality outcome family.

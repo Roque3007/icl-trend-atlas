@@ -213,6 +213,17 @@ a { color: inherit; }
 .lens-switch button { border: 0; border-right: 1px solid var(--line); background: transparent; padding: 9px 4px; font-size: 11px; font-weight: 700; cursor: pointer; }
 .lens-switch button:last-child { border-right: 0; }
 .lens-switch button.active { background: #e9edf0; color: var(--teal-deep); }
+.group-sort { display: grid; gap: 4px; margin: 0 0 9px; }
+.group-sort > span { color: var(--muted); font-size: 10px; font-weight: 700; }
+.group-sort select { width: 100%; min-height: 34px; border: 1px solid var(--line); background: #fff; padding: 5px 9px; font-size: 11px; }
+.group-sort select:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.group-bar-note { margin: 0 0 7px; color: var(--muted); font-size: 10px; line-height: 1.3; }
+.group-bar-legend { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-bottom: 12px; color: var(--muted); font-size: 9px; }
+.group-bar-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.group-bar-legend i { display: inline-block; width: 8px; height: 8px; }
+.group-bar-legend .improved, .group-bar .improved { background: #3f6b58; }
+.group-bar-legend .unchanged, .group-bar .unchanged { background: #8c9294; }
+.group-bar-legend .declined, .group-bar .declined { background: #864b50; }
 .group-list { display: grid; grid-auto-rows: max-content; flex: 1 1 auto; min-height: 0; align-content: start; gap: 7px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-right: 3px; scrollbar-width: thin; scrollbar-color: rgba(16,42,48,.28) transparent; }
 .group-row { border: 1px solid transparent; background: transparent; display: grid; grid-template-columns: 27px 1fr; gap: 9px; text-align: left; padding: 12px 10px; cursor: pointer; }
 .group-row:hover, .group-row:focus-visible { background: #f1f3f4; border-color: var(--line); outline: none; }
@@ -220,8 +231,11 @@ a { color: inherit; }
 .group-index { font-size: 9px; opacity: .48; padding-top: 2px; }
 .group-body { min-width: 0; display: grid; }
 .group-name { font-size: 12px; font-weight: 800; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
-.group-meta { font-size: 9px; opacity: .58; margin-top: 4px; }
-.distribution { display: flex; height: 3px; overflow: hidden; border-radius: 2px; margin-top: 10px; gap: 1px; }
+.group-meta { font-size: 9px; opacity: .7; margin-top: 4px; line-height: 1.35; }
+.group-bar-track { display: block; width: 100%; height: 8px; margin-top: 9px; background: #e1e5e6; }
+.group-row.selected .group-bar-track { background: rgba(255,255,255,.24); }
+.group-bar { display: flex; height: 100%; min-width: 2px; }
+.group-bar span { height: 100%; }
 
 .breadcrumb { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
 .breadcrumb strong { color: var(--ink); }
@@ -233,7 +247,8 @@ a { color: inherit; }
 .metric-ribbon span { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .metric-ribbon strong { font-size: 18px; }
 
-.filter-bar { display: grid; grid-template-columns: minmax(180px,1fr) auto auto; gap: 7px; margin-bottom: 12px; flex: none; }
+.filter-bar { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin-bottom: 12px; flex: none; }
+.filter-bar .search-field { grid-column: 1 / -1; }
 .search-field { position: relative; }
 .search-field > span:not(.sr-only) { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; }
 .search-field input, .filter-bar select { width: 100%; border: 1px solid var(--line); background: rgba(255,255,255,.72); padding: 10px 11px; font-size: 10px; outline: none; }
@@ -403,7 +418,7 @@ a { color: inherit; }
   .group-list { flex: none; max-height: 440px; }
   .paper-list { flex: none; max-height: min(620px, 72vh); }
   .filter-bar { grid-template-columns: 1fr 1fr; }
-  .search-field { grid-column: 1 / -1; }
+  .filter-bar .search-field { grid-column: 1 / -1; }
   .trajectory-inspector { grid-column: auto; }
   .trajectory-inspector .inspector-content { display: block; }
   .trajectory-inspector .chart-block { margin-top: 22px; }

@@ -9,6 +9,7 @@ type FieldColorMode = "Pattern" | "I/O family" | "Operation" | "Scope";
 type FieldXMode = "progress" | "shots" | "logShots";
 type MatrixRowMode = "I/O pair" | "Operation";
 type WorkspaceView = "comparison" | "evidence" | "pipeline";
+type GroupSort = "trajectories" | "papers" | "notImproved";
 type Trajectory = (typeof atlas.trajectories)[number];
 type ResultPoint = Trajectory["results"][number];
 type OverviewFilters = {
@@ -1140,9 +1141,11 @@ function CoverageAudit({ onChooseOperation }: { onChooseOperation: (operation: s
 export default function Home() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("comparison");
   const [lens, setLens] = useState<Lens>("Task");
+  const [groupSort, setGroupSort] = useState<GroupSort>("trajectories");
   const [selectedGroup, setSelectedGroup] = useState(() => topGroupForLens("Task"));
   const [query, setQuery] = useState("");
   const [patternFilter, setPatternFilter] = useState("All patterns");
+  const [outcomeFilter, setOutcomeFilter] = useState("All endpoints");
   const [evidenceFilter, setEvidenceFilter] = useState("All evidence");
   const [overviewFilters, setOverviewFilters] = useState<OverviewFilters>(emptyOverviewFilters);
   const [expandedPaper, setExpandedPaper] = useState("");
@@ -1162,9 +1165,17 @@ export default function Home() {
         name,
         trajectories,
         papers: new Set(trajectories.map((item) => item.paperId)).size,
+        // Endpoint direction is descriptive only; no hypothesis test is implied.
+        notImproved: trajectories.filter((item) => item.endpointOutcome !== "Improved").length,
       }))
-      .sort((a, b) => b.trajectories.length - a.trajectories.length);
-  }, [lens]);
+      .sort((a, b) => {
+        const count = groupSort === "papers" ? b.papers - a.papers : groupSort === "notImproved" ? b.notImproved - a.notImproved : b.trajectories.length - a.trajectories.length;
+        return count || b.trajectories.length - a.trajectories.length || a.name.localeCompare(b.name);
+      });
+  }, [groupSort, lens]);
+  // Use a common trajectory-count denominator so the bars compare category size,
+  // while their internal segments show endpoint composition.
+  const largestGroup = Math.max(1, ...groups.map((group) => group.trajectories.length));
 
   const activeGroup = groups.find((group) => group.name === selectedGroup) ?? groups[0];
   const matching = useMemo(() => activeGroup?.trajectories ?? [], [activeGroup]);
@@ -1186,10 +1197,11 @@ export default function Home() {
       ].join(" ").toLowerCase();
       const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
       const matchesPattern = patternFilter === "All patterns" || trajectory.category === patternFilter;
+      const matchesOutcome = outcomeFilter === "All endpoints" || (outcomeFilter === "Not improved" ? trajectory.endpointOutcome !== "Improved" : trajectory.endpointOutcome === outcomeFilter);
       const matchesEvidence = evidenceFilter === "All evidence" || trajectory.evidenceTier === evidenceFilter;
-      return matchesQuery && matchesPattern && matchesEvidence;
+      return matchesQuery && matchesPattern && matchesOutcome && matchesEvidence;
     });
-  }, [evidenceFilter, matching, patternFilter, query]);
+  }, [evidenceFilter, matching, outcomeFilter, patternFilter, query]);
 
   const paperGroups = useMemo(() => {
     const buckets = new Map<string, Trajectory[]>();
@@ -1231,6 +1243,7 @@ export default function Home() {
     setSelectedGroup(topGroupForLens(nextLens));
     setQuery("");
     setPatternFilter("All patterns");
+    setOutcomeFilter("All endpoints");
     setEvidenceFilter("All evidence");
   }
 
@@ -1238,6 +1251,7 @@ export default function Home() {
     setSelectedGroup(name);
     setQuery("");
     setPatternFilter("All patterns");
+    setOutcomeFilter("All endpoints");
     setEvidenceFilter("All evidence");
   }
 
@@ -1250,6 +1264,7 @@ export default function Home() {
     setSelectedGroup(trajectory.ioFamily);
     setQuery("");
     setPatternFilter("All patterns");
+    setOutcomeFilter("All endpoints");
     setEvidenceFilter("All evidence");
     setExpandedPaper(trajectory.paperId);
     setSelectedTrajectoryId(trajectory.trajectoryId);
@@ -1268,6 +1283,7 @@ export default function Home() {
     setSelectedGroup(operation);
     setQuery("");
     setPatternFilter("All patterns");
+    setOutcomeFilter("All endpoints");
     setEvidenceFilter("All evidence");
     window.requestAnimationFrame(() => {
       document.getElementById("research-workspace")?.scrollIntoView({
@@ -1284,6 +1300,7 @@ export default function Home() {
     setSelectedGroup(rowName);
     setQuery(modelFamily);
     setPatternFilter("All patterns");
+    setOutcomeFilter("All endpoints");
     setEvidenceFilter("All evidence");
     setWorkspaceView("evidence");
     window.requestAnimationFrame(() => {
@@ -1299,6 +1316,7 @@ export default function Home() {
     setSelectedGroup(group);
     setQuery("");
     setPatternFilter("All patterns");
+    setOutcomeFilter("All endpoints");
     setEvidenceFilter("All evidence");
     setWorkspaceView("evidence");
     window.requestAnimationFrame(() => {
@@ -1410,13 +1428,17 @@ export default function Home() {
             ))}
           </div>
 
+          <label className="group-sort"><span>Sort groups</span><select value={groupSort} onChange={(event) => setGroupSort(event.target.value as GroupSort)}><option value="trajectories">Most trajectories</option><option value="papers">Most papers</option><option value="notImproved">Most non-improving trajectories</option></select></label>
+          <p className="group-bar-note">Bar length = trajectories. Segments = endpoint outcome.</p>
+          <div className="group-bar-legend"><span><i className="improved" />Improved</span><span><i className="unchanged" />No change</span><span><i className="declined" />Declined</span></div>
+
           <div className="group-list">
             {groups.map((group, index) => {
               const selected = activeGroup?.name === group.name;
-              const distribution = Object.entries(group.trajectories.reduce<Record<string, number>>((counts, trajectory) => {
-                counts[trajectory.category] = (counts[trajectory.category] ?? 0) + 1;
+              const distribution = group.trajectories.reduce<Record<string, number>>((counts, trajectory) => {
+                counts[trajectory.endpointOutcome] = (counts[trajectory.endpointOutcome] ?? 0) + 1;
                 return counts;
-              }, {}));
+              }, {});
               return (
                 <button
                   key={group.name}
@@ -1427,9 +1449,11 @@ export default function Home() {
                   <span className="group-index">{String(index + 1).padStart(2, "0")}</span>
                   <span className="group-body">
                     <span className="group-name">{group.name}</span>
-                    <span className="group-meta">{group.trajectories.length} trajectories · {group.papers} papers</span>
-                    <span className="distribution" aria-hidden="true">
-                      {distribution.map(([category, count]) => <span key={category} style={{ flex: count, background: patternColors[category] ?? "#6d7780" }} />)}
+                    <span className="group-meta">{group.trajectories.length} trajectories · {group.papers} papers · {group.notImproved} not improved</span>
+                    <span className="group-bar-track" aria-hidden="true">
+                      <span className="group-bar" style={{ width: `${100 * group.trajectories.length / largestGroup}%` }}>
+                        {(["Improved", "No change", "Declined"] as const).map((outcome) => distribution[outcome] ? <span key={outcome} className={outcome === "Improved" ? "improved" : outcome === "Declined" ? "declined" : "unchanged"} style={{ flex: distribution[outcome] }} /> : null)}
+                      </span>
                     </span>
                   </span>
                 </button>
@@ -1461,6 +1485,12 @@ export default function Home() {
               <select value={patternFilter} onChange={(event) => setPatternFilter(event.target.value)}>
                 <option>All patterns</option>
                 {Object.keys(patternColors).map((pattern) => <option key={pattern}>{pattern}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">Filter by endpoint outcome</span>
+              <select value={outcomeFilter} onChange={(event) => setOutcomeFilter(event.target.value)}>
+                <option>All endpoints</option><option>Not improved</option><option>Declined</option><option>No change</option><option>Improved</option>
               </select>
             </label>
             <label>
@@ -1507,7 +1537,7 @@ export default function Home() {
               );
             })}
             {paperGroups.length === 0 ? (
-              <div className="empty-state"><span>0</span><strong>No trajectories match these filters.</strong><button type="button" onClick={() => { setQuery(""); setPatternFilter("All patterns"); setEvidenceFilter("All evidence"); }}>Clear filters</button></div>
+              <div className="empty-state"><span>0</span><strong>No trajectories match these filters.</strong><button type="button" onClick={() => { setQuery(""); setPatternFilter("All patterns"); setOutcomeFilter("All endpoints"); setEvidenceFilter("All evidence"); }}>Clear filters</button></div>
             ) : null}
           </div>
         </section>
