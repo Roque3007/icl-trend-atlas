@@ -104,3 +104,6 @@ Version 10 maps promise/evidence judgments to labels or ordinal ratings,
 psycholinguistic marker extraction to spans, and out-of-domain intent detection
 to classification. The source tables report these as distinct task outputs;
 the mappings keep newly verified rows out of an uninformative `Other` category.
+Version 11 maps HateXplain's hate-speech label prediction to classification
+and GSM8K's grade-school math task to reasoning. Both mappings follow the
+source task definitions in the newly verified tables.

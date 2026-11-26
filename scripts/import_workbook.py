@@ -28,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 10
+TAXONOMY_VERSION = 11
 
 
 # These mappings are limited to unambiguous public checkpoint names. The URLs
@@ -402,6 +402,15 @@ def task_taxonomy(task, dataset=""):
             "taskSubtype": "Hyperpartisan news detection",
             "semanticScope": "Instance-level",
         }
+    # The HateXplain rows predict an offensive/hate label; they are not a
+    # generic, undefined task despite lacking the word "classification".
+    if "hate speech detection" in text:
+        return {
+            "inputType": "Text", "outputType": "Label",
+            "semanticOperation": "Classification",
+            "taskSubtype": "Hate speech detection",
+            "semanticScope": "Instance-level",
+        }
 
     if "audio question answering" in text:
         return {
@@ -554,6 +563,7 @@ def task_taxonomy(task, dataset=""):
             "commonsense reasoning",
             "word-problem solving",
             "mathematics problem solving",
+            "grade-school math reasoning",
             "linear-function arithmetic",
             "reasoning with scratchpad",
             "constraint programming model generation",

@@ -38,16 +38,16 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?10/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?11/);
 });
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
   const atlas = JSON.parse(readFileSync(new URL("../app/data/atlas.json", import.meta.url), "utf8"));
   assert.equal(atlas.meta.reviewedPaperCount, 231);
-  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 89, exclude: 79, uncertain: 63 });
-  assert.equal(atlas.meta.paperCount, 41);
-  assert.equal(atlas.meta.trajectoryCount, 1295);
-  assert.equal(atlas.meta.resultCount, 4132);
+  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 91, exclude: 79, uncertain: 61 });
+  assert.equal(atlas.meta.paperCount, 43);
+  assert.equal(atlas.meta.trajectoryCount, 1359);
+  assert.equal(atlas.meta.resultCount, 4260);
   // A verified-only export can contain no verified timing observations. The
   // invariant is that any such observations never enter performance analysis.
   assert.ok(atlas.trajectories.length > 0);
@@ -94,4 +94,14 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.equal(oodIntent.length, 30);
   assert.ok(oodIntent.every((row) => row.semanticOperation === "Classification"));
   assert.ok(oodIntent.every((row) => row.results.length === 4));
+  const fairness = atlas.trajectories.filter((row) => row.paperId === "2024.nlp4pi-1.4");
+  assert.equal(fairness.length, 36);
+  assert.ok(fairness.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,10"));
+  assert.ok(fairness.every((row) => row.semanticOperation === "Classification"));
+  assert.ok(fairness.every((row) => row.statisticalTests.length === 0));
+  const sara = atlas.trajectories.filter((row) => row.paperId === "2025.findings-emnlp.137");
+  assert.equal(sara.length, 28);
+  assert.ok(sara.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,6"));
+  assert.ok(sara.every((row) => row.semanticOperation !== "Other"));
+  assert.ok(sara.every((row) => row.statisticalTests.length === 0));
 });
