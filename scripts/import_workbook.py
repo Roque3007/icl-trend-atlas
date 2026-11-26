@@ -28,7 +28,7 @@ PATTERN_LABELS = {
 
 # Increment this value whenever grouping rules change. The version is written to
 # atlas.json so analyses can state which taxonomy produced their categories.
-TAXONOMY_VERSION = 9
+TAXONOMY_VERSION = 10
 
 
 # These mappings are limited to unambiguous public checkpoint names. The URLs
@@ -327,6 +327,36 @@ def reported_model_parameters(model_name, model_family):
 def task_taxonomy(task, dataset=""):
     """Classify task shape separately from the semantic operation it performs."""
     text = str(task or "").lower()
+
+    # These newly verified tables separate promise status, evidence status,
+    # evidence quality, and timeline judgments. They emit labels or ratings,
+    # not free-form generated text; preserve the distinct task subtypes.
+    if any(label in text for label in (
+        "promise status identification", "evidence status assessment",
+        "evidence quality evaluation", "verification timeline prediction",
+    )):
+        is_quality = "quality" in text
+        return {
+            "inputType": "Text", "outputType": "Ordinal rating" if is_quality else "Label",
+            "semanticOperation": "Rating prediction" if is_quality else "Classification",
+            "taskSubtype": str(task), "semanticScope": "Instance-level",
+        }
+
+    # PsyCoMark's marker task returns located spans; its conspiracy task
+    # predicts a document label. The source reports them in separate columns.
+    if "psycholinguistic conspiracy marker extraction" in text:
+        return {
+            "inputType": "Text", "outputType": "Marker span(s)",
+            "semanticOperation": "Span extraction",
+            "taskSubtype": "Psycholinguistic marker extraction",
+            "semanticScope": "Local / span",
+        }
+    if "psycholinguistic conspiracy detection" in text or "out-of-domain intent detection" in text:
+        return {
+            "inputType": "Text", "outputType": "Label",
+            "semanticOperation": "Classification", "taskSubtype": str(task),
+            "semanticScope": "Instance-level",
+        }
 
     # iNews keeps image and text inputs as separate experimental conditions.
     # Both predict an ordinal arousal rating rather than a class label or text.

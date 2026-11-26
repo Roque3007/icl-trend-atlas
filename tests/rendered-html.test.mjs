@@ -38,13 +38,16 @@ test("server-renders the ICL Atlas application shell", async () => {
   assert.match(html, /Selected experiment/);
   assert.match(html, /Data and methodology/);
   assert.match(html, /Download dataset/);
-  assert.match(html, /taxonomy v(?:<!-- -->)?9/);
+  assert.match(html, /taxonomy v(?:<!-- -->)?10/);
 });
 
 test("published evidence is source-verified and excludes timing outcomes", () => {
   const atlas = JSON.parse(readFileSync(new URL("../app/data/atlas.json", import.meta.url), "utf8"));
   assert.equal(atlas.meta.reviewedPaperCount, 231);
-  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 86, exclude: 79, uncertain: 66 });
+  assert.deepEqual(atlas.meta.screeningStatusCounts, { include: 89, exclude: 79, uncertain: 63 });
+  assert.equal(atlas.meta.paperCount, 41);
+  assert.equal(atlas.meta.trajectoryCount, 1295);
+  assert.equal(atlas.meta.resultCount, 4132);
   // A verified-only export can contain no verified timing observations. The
   // invariant is that any such observations never enter performance analysis.
   assert.ok(atlas.trajectories.length > 0);
@@ -79,4 +82,16 @@ test("published evidence is source-verified and excludes timing outcomes", () =>
   assert.ok(iwslt.every((row) => row.statisticalTests.length === 0));
   assert.ok(iwslt.every((row) => row.resultTableLink.endsWith("2025.iwslt-1.11.pdf#page=16")));
   assert.ok(iwslt.filter((row) => row.metric === "BLEU").every((row) => row.metricGroup === "Machine translation quality"));
+  const promise = atlas.trajectories.filter((row) => row.paperId === "2025.rocling-main.32");
+  assert.equal(promise.length, 24);
+  assert.ok(promise.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,1,3,5"));
+  assert.ok(promise.every((row) => row.semanticOperation !== "Other"));
+  const psycomark = atlas.trajectories.filter((row) => row.paperId === "2026.semeval-1.432");
+  assert.equal(psycomark.length, 10);
+  assert.ok(psycomark.every((row) => row.results.map((point) => point.shotCount).join(",") === "0,1,5,10,15,20"));
+  assert.ok(psycomark.filter((row) => row.task.includes("marker extraction")).every((row) => row.semanticOperation === "Span extraction"));
+  const oodIntent = atlas.trajectories.filter((row) => row.paperId === "2024.lrec-main.210");
+  assert.equal(oodIntent.length, 30);
+  assert.ok(oodIntent.every((row) => row.semanticOperation === "Classification"));
+  assert.ok(oodIntent.every((row) => row.results.length === 4));
 });

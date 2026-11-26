@@ -100,3 +100,7 @@ dataset condition, not from the task name alone.
 Version 9 groups plain BLEU with other machine-translation quality metrics,
 including spBLEU. It previously fell into `Other` despite measuring the same
 reported translation-quality outcome family.
+Version 10 maps promise/evidence judgments to labels or ordinal ratings,
+psycholinguistic marker extraction to spans, and out-of-domain intent detection
+to classification. The source tables report these as distinct task outputs;
+the mappings keep newly verified rows out of an uninformative `Other` category.
